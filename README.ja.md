@@ -55,17 +55,19 @@ _[asciinema](https://github.com/asciinema/asciinema) で記録した実際のロ
 - メディアをマージせずに意味的 diff と三方向 merge を示す
 - 名前付き `hook`、`body`、`proof`、`cta` slot を dest へコンパイルする
 - 同期 AAC を独立キャッシュし、映像リンクと mux する
+- 記録済み `params.speed` を適用する（setpts/atempo または intra 再サンプル）。隣接するクリーン slot は汚さない
+- 接合が IDR 非整列のとき Long-GOP kerf を埋める。closed-GOP ファイル接合では空 kerf
 - 変わった hook を再 encode し、変わらない body を bitstream copy する
 - 宣言ウィンドウと出荷済み time map で `hook_rate` を解決する
 - 範囲付き OTIO サブセットを損失レポート付きで export/import する
-- decode と composite で選択 scion をプレビューする
+- decode と composite で選択 scion をプレビューし、同期音声を載せる
 - 欠損 blob 発見つきで object-store ルートへ blob を同期する
 
 ## できないこと
 
-graft は speed/retime を適用せず、任意の mid-GOP ソースを修復せず、NLE の
-effects、grades、generators を往復しません。ピクセル上の Git でも、Git
-履歴の代替でも、ロックサーバでも、DAM でも、レビューツールでもありません。
+graft は任意の mid-GOP タイムラインを修復せず、feedback から speed を発明せず、
+NLE の effects、grades、generators を往復しません。ピクセル上の Git でも、
+Git 履歴の代替でも、ロックサーバでも、DAM でも、レビューツールでもありません。
 
 逐次コンパイラ、action graph、ファイルシステム CAS、object-store 転送、
 フレーム粒度バックエンド、システムの ffmpeg/x264 経路はツリー内にあります。

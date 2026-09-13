@@ -268,9 +268,6 @@ pub fn bind(
     let end = out_s.unwrap_or(start + duration);
     let source = TimedRange::from_seconds(rate, start, end)?;
     let params = speed.map(|value| serde_json::json!({ "speed": value }));
-    if speed.is_some_and(|value| (value - 1.0).abs() > 1e-9) {
-        eprintln!("warning: speed is recorded but retime rendering is not implemented");
-    }
     let audio = resolved
         .probe
         .as_ref()

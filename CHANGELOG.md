@@ -9,6 +9,15 @@ crates.io is not published (`publish = false`).
 
 ## [Unreleased]
 
+### Added
+
+- Applied `params.speed`: `graft-intra` resamples dest frames; ffmpeg uses
+  `setpts` / `atempo`. Adjacent clean slots stay hits.
+- Long-GOP kerf fill for non-IDR joins; empty kerf remains the closed-GOP
+  IDR path. Unproven repair fails with `kerf_unproven`.
+- Preview muxes synced audio (silence-padded when a spine slot lacks it).
+  Linked dest audio duration is checked against picture.
+
 ## [0.2.0] - 2026-09-14
 
 First workspace/compiler GitHub tag. Schema format id `0.2.0`. crates.io

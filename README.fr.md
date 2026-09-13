@@ -56,18 +56,22 @@ La source de lecture est [`landing.cast`](docs/assets/landing.cast)._
 - Afficher un diff sémantique et un merge à trois voies sans fusionner les médias
 - Compiler les slots nommés `hook`, `body`, `proof` et `cta` vers un dest
 - Mettre en cache l’AAC synchronisé à part et le muxer avec le lien vidéo
+- Appliquer `params.speed` enregistré (setpts/atempo ou resample intra)
+  sans salir les slots propres adjacents
+- Remplir un kerf Long-GOP quand la jointure n’est pas alignée IDR ;
+  kerf vide aux jointures closed-GOP
 - Ré-encoder un hook changé tout en copiant le body inchangé en bitstream
 - Résoudre `hook_rate` via la fenêtre déclarée et la time map livrée
 - Exporter/importer un sous-ensemble OTIO borné avec un rapport de perte
-- Prévisualiser un scion par décodage et composite
+- Prévisualiser un scion par décodage et composite, avec audio synchronisé
 - Synchroniser les blobs vers une racine object-store avec découverte des blobs manquants
 
 ## Ce qu’il ne peut pas faire
 
-graft n’applique pas speed/retime, ne répare pas des sources mid-GOP
-arbitraires et ne fait pas d’aller-retour des effets, grades ou generators
-d’un NLE. Ce n’est pas Git-sur-pixels, un remplacement de l’historique Git,
-un serveur de verrou, un DAM ni un outil de revue.
+graft ne répare pas des timelines mid-GOP arbitraires, n’invente pas une
+speed depuis un feedback et ne fait pas d’aller-retour des effets, grades
+ou generators d’un NLE. Ce n’est pas Git-sur-pixels, un remplacement de
+l’historique Git, un serveur de verrou, un DAM ni un outil de revue.
 
 Le compilateur séquentiel, le graphe d’actions, le CAS filesystem, le
 transport object-store, le backend grain image et le chemin ffmpeg/x264

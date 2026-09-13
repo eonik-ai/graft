@@ -53,17 +53,19 @@ _真实的本地会话，由 [asciinema](https://github.com/asciinema/asciinema)
 - 显示语义 diff 与三方 merge，不合并媒体
 - 把名为 `hook`、`body`、`proof`、`cta` 的 slot 编译到 dest
 - 独立缓存同步 AAC，并与视频链路 mux
+- 应用已记录的 `params.speed`（setpts/atempo 或 intra 重采样），且不弄脏相邻干净 slot
+- 在非 IDR 对齐的接合处填充 Long-GOP kerf；closed-GOP 文件接合仍为空 kerf
 - 重编码变更的 hook，同时 bitstream 拷贝未变的 body
 - 通过声明窗口与已交付 time map 解析 `hook_rate`
 - 导出/导入有范围的 OTIO 子集，并给出损失报告
-- 通过 decode 与 composite 预览所选 scion
+- 通过 decode 与 composite 预览所选 scion，并带同步音频
 - 用缺失 blob 发现把 blob 同步到 object-store 根目录
 
 ## 它做不到什么
 
-graft 不应用 speed/retime，不修复任意 mid-GOP 源，也不把 NLE 的 effects、
-grades、generators 无损往返。它不是像素上的 Git、Git 历史的替代、锁服务器、
-DAM 或审片工具。
+graft 不修复任意 mid-GOP 时间线，不从 feedback 猜测 speed，也不把 NLE 的
+effects、grades、generators 无损往返。它不是像素上的 Git、Git 历史的替代、
+锁服务器、DAM 或审片工具。
 
 顺序编译器、action graph、文件系统 CAS、object-store 传输、帧粒度后端以及
 系统 ffmpeg/x264 路径都在仓库里。

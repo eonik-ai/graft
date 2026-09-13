@@ -55,18 +55,22 @@ A fonte da reprodução é [`landing.cast`](docs/assets/landing.cast)._
 - Mostrar diff semântico e merge de três vias sem misturar mídia
 - Compilar slots nomeados `hook`, `body`, `proof` e `cta` para um dest
 - Cachear AAC sincronizado à parte e muxá-lo com o enlace de vídeo
+- Aplicar `params.speed` gravado (setpts/atempo ou resample intra) sem
+  sujar slots limpos adjacentes
+- Preencher um kerf Long-GOP quando a junta não está alinhada a IDR;
+  kerf vazio em juntas closed-GOP
 - Re-encodear um hook alterado e copiar por bitstream o body intacto
 - Resolver `hook_rate` pela janela declarada e o time map enviado
 - Exportar/importar um subconjunto OTIO delimitado com relatório de perda
-- Pré-visualizar um scion por decode e composite
+- Pré-visualizar um scion por decode e composite, com áudio sincronizado
 - Sincronizar blobs para uma raiz object-store com descoberta de blobs faltantes
 
 ## O que ele não faz
 
-graft não aplica speed/retime, não repara fontes mid-GOP arbitrárias nem
-faz ida e volta de efeitos, grades ou generators de um NLE. Não é
-Git-sobre-pixels, um substituto do histórico do Git, um servidor de lock,
-um DAM nem uma ferramenta de review.
+graft não repara timelines mid-GOP arbitrárias, não inventa um speed a
+partir de feedback nem faz ida e volta de efeitos, grades ou generators
+de um NLE. Não é Git-sobre-pixels, um substituto do histórico do Git, um
+servidor de lock, um DAM nem uma ferramenta de review.
 
 O compilador sequencial, o grafo de ações, o CAS em filesystem, o
 transporte object-store, o backend de grão de quadro e o caminho

@@ -190,6 +190,14 @@ impl Binding {
         self.source.end_seconds()
     }
 
+    pub fn speed(&self) -> f64 {
+        self.params
+            .as_ref()
+            .and_then(|value| value.get("speed"))
+            .and_then(|value| value.as_f64())
+            .unwrap_or(1.0)
+    }
+
     pub fn validate(&self, slot_id: &str) -> Result<(), Error> {
         require_material(&self.material)?;
         self.source.validate(&format!("binding {slot_id}.source"))?;
@@ -320,12 +328,7 @@ fn binding_duration_compatible(
     binding: &Binding,
     dest_rate: &FrameRate,
 ) -> Result<(), Error> {
-    let speed = binding
-        .params
-        .as_ref()
-        .and_then(|value| value.get("speed"))
-        .and_then(|value| value.as_f64())
-        .unwrap_or(1.0);
+    let speed = binding.speed();
     if speed <= 0.0 || !speed.is_finite() {
         return Err(Error::invalid(format!(
             "binding {} speed must be finite and > 0",

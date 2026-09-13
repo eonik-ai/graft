@@ -44,7 +44,8 @@ from the binding duration.
 | `[600, 690)` | cta | click-through, end-card skip |
 
 Current behavior: `graft signal --kind hook_rate --build <id>` → slots
-`{hook}`, kerfs `{hook→body}`. `body_v1` stays clean.
+`{hook}`, kerfs `{hook→body}`. `body_v1` stays clean. A "too slow"
+signal still names the slot; iterate does not invent `params.speed`.
 
 Reference implementation: [`ref/graft_ref/signal.py`](../ref/graft_ref/signal.py).
 The test in `ref/tests/test_signal.py` is part of the spec.

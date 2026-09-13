@@ -194,23 +194,49 @@ fn execute(
                 parts.push(ConcatPartBytes {
                     empty: kind == Kind::Kerf && bytes.is_empty(),
                     bytes,
+                    duration_s: 0.0,
                 });
             }
+            let audio_by_slot: std::collections::BTreeMap<String, graft_cas::BlobId> = graph
+                .audio
+                .iter()
+                .zip(audio_blobs.iter())
+                .map(|(action, blob)| (action.slot.id.clone(), blob.clone()))
+                .collect();
+            let audio_parts = if graph.audio.is_empty() {
+                Vec::new()
+            } else {
+                graph
+                    .slots
+                    .iter()
+                    .map(|slot| {
+                        let duration_s = graph
+                            .dest
+                            .rate
+                            .seconds_from_frames(slot.slot.range.duration as i64);
+                        if let Some(blob) = audio_by_slot.get(&slot.slot.id) {
+                            store
+                                .get_blob(Kind::AudioEncode, blob)
+                                .map(|bytes| ConcatPartBytes {
+                                    empty: bytes.is_empty(),
+                                    bytes,
+                                    duration_s,
+                                })
+                        } else {
+                            Ok(ConcatPartBytes {
+                                empty: true,
+                                bytes: Vec::new(),
+                                duration_s,
+                            })
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
             let dest_bytes = concat.concat(&ConcatRequest {
                 action: &graph.concat,
                 dest: &graph.dest,
                 parts: &parts,
-                audio_parts: &audio_blobs
-                    .iter()
-                    .map(|blob| {
-                        store
-                            .get_blob(Kind::AudioEncode, blob)
-                            .map(|bytes| ConcatPartBytes {
-                                empty: false,
-                                bytes,
-                            })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
+                audio_parts: &audio_parts,
             })?;
             put_action(
                 store,

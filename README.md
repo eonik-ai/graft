@@ -55,17 +55,22 @@ The replay source is [`landing.cast`](docs/assets/landing.cast)._
 - Show semantic diff and three-way merge without merging media
 - Compile named `hook`, `body`, `proof`, and `cta` slots to a dest
 - Cache synchronized AAC independently and mux it with the video link
+- Apply recorded `params.speed` (setpts/atempo or intra resample) without
+  dirtying adjacent clean slots
+- Fill a Long-GOP kerf when a join is not IDR-aligned; keep an empty kerf
+  at closed-GOP file joins
 - Re-encode a changed hook while bitstream-copying the unchanged body
 - Resolve `hook_rate` through the declared window and the shipped time map
 - Export/import a scoped OTIO subset with an explicit loss report
-- Preview a selected scion by decode and composite
+- Preview a selected scion by decode and composite, with synced audio
 - Sync blobs to an object-store root with missing-blob discovery
 
 ## What it cannot do
 
-graft does not apply speed/retime, repair arbitrary mid-GOP sources, or
-round-trip NLE effects, grades, or generators. It is not Git-on-pixels, a
-replacement for Git history, a lock server, a DAM, or a review tool.
+graft does not repair arbitrary mid-GOP timelines, guess a speed from
+feedback, or round-trip NLE effects, grades, or generators. It is not
+Git-on-pixels, a replacement for Git history, a lock server, a DAM, or a
+review tool.
 
 The sequential compiler, action graph, filesystem CAS, object-store
 transport, frame-grain backend, and system ffmpeg/x264 path are in-tree.

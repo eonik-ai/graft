@@ -68,8 +68,10 @@ variant derivation, not Git history.
 ```
 
 Source duration at `params.speed` must match the slot's dest duration
-(one-frame tolerance). **Retime is not applied yet** — speed ≠ 1 invalidates
-the cache key but does not resample frames.
+(one-frame tolerance). Speed ≠ 1 invalidates that slot's action key and
+is applied at encode (`graft-intra` frame resample; ffmpeg `setpts` /
+`atempo`). Adjacent clean slots stay cache hits. Iterate names the slot;
+it does not invent a speed.
 
 `encoder.profile` is optional (x264 fingerprints still send `"high"`;
 `graft-intra` uses `"intra"`). Toolchain identity is part of the encoder

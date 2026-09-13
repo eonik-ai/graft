@@ -47,7 +47,7 @@ fn run_ok(bin: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     Ok(out.stdout)
 }
 
-/// Video stream facts from ffprobe. Audio is reported, not compiled (v0.2).
+/// Video stream facts from ffprobe. Audio duration is reported when present.
 #[derive(Clone, Debug)]
 pub struct Probe {
     pub duration_s: f64,
@@ -60,6 +60,8 @@ pub struct Probe {
     pub time_base: String,
     pub frame_count: Option<u64>,
     pub has_audio: bool,
+    pub audio_duration_s: Option<f64>,
+    pub starts_on_idr: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -177,6 +179,12 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
     )
     .ok();
     let has_audio = audio.map(|a| !a.is_empty()).unwrap_or(false);
+    let audio_duration_s = if has_audio {
+        probe_audio_duration(path).ok()
+    } else {
+        None
+    };
+    let starts_on_idr = first_packet_is_keyframe(path).unwrap_or(false);
     if width == 0 || height == 0 {
         return Err(EncodeError::Invalid("ffprobe: video has zero size".into()));
     }
@@ -191,7 +199,135 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
         time_base,
         frame_count,
         has_audio,
+        audio_duration_s,
+        starts_on_idr,
     })
+}
+
+fn probe_audio_duration(path: &Path) -> Result<f64, EncodeError> {
+    let ffprobe = ffprobe_bin();
+    let path_s = path
+        .to_str()
+        .ok_or_else(|| EncodeError::Invalid("path".into()))?;
+    let raw = run_ok(
+        &ffprobe,
+        &[
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=duration:format=duration",
+            "-of",
+            "json",
+            path_s,
+        ],
+    )
+    .map_err(EncodeError::Invalid)?;
+    let v: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+    v.pointer("/streams/0/duration")
+        .and_then(|d| d.as_str())
+        .and_then(|s| s.parse().ok())
+        .or_else(|| {
+            v.pointer("/format/duration")
+                .and_then(|d| d.as_str())
+                .and_then(|s| s.parse().ok())
+        })
+        .ok_or_else(|| EncodeError::Invalid("ffprobe: audio duration missing".into()))
+}
+
+fn first_packet_is_keyframe(path: &Path) -> Result<bool, EncodeError> {
+    let ffprobe = ffprobe_bin();
+    let path_s = path
+        .to_str()
+        .ok_or_else(|| EncodeError::Invalid("path".into()))?;
+    let raw = run_ok(
+        &ffprobe,
+        &[
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-read_intervals",
+            "%+#1",
+            "-show_entries",
+            "frame=key_frame,pict_type",
+            "-of",
+            "json",
+            path_s,
+        ],
+    )
+    .map_err(EncodeError::Invalid)?;
+    let v: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+    let frame = v
+        .get("frames")
+        .and_then(|frames| frames.get(0))
+        .ok_or_else(|| EncodeError::Invalid("ffprobe: no video frame".into()))?;
+    let key = frame
+        .get("key_frame")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0)
+        == 1;
+    let pict = frame
+        .get("pict_type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    Ok(key && pict == "I")
+}
+
+fn atempo_filter(speed: f64) -> Result<String, EncodeError> {
+    if speed <= 0.0 || !speed.is_finite() {
+        return Err(EncodeError::Invalid(
+            "binding speed must be finite and > 0".into(),
+        ));
+    }
+    let mut remaining = speed;
+    let mut parts = Vec::new();
+    while remaining > 2.0 + 1e-9 {
+        parts.push("atempo=2.0".into());
+        remaining /= 2.0;
+    }
+    while remaining < 0.5 - 1e-9 {
+        parts.push("atempo=0.5".into());
+        remaining *= 2.0;
+    }
+    parts.push(format!("atempo={remaining:.6}"));
+    Ok(parts.join(","))
+}
+
+fn silence_aac(ffmpeg: &Path, duration_s: f64) -> Result<Vec<u8>, ConcatError> {
+    let dir = tempfile::tempdir().map_err(|e| ConcatError::Invalid(e.to_string()))?;
+    let out = dir.path().join("silence.m4a");
+    let out_s = out.to_string_lossy().into_owned();
+    run_ok(
+        ffmpeg,
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=48000:cl=stereo",
+            "-t",
+            &format!("{duration_s:.6}"),
+            "-c:a",
+            "aac",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-b:a",
+            "192k",
+            &out_s,
+        ],
+    )
+    .map_err(ConcatError::Invalid)?;
+    fs::read(&out).map_err(|e| ConcatError::Invalid(e.to_string()))
 }
 
 fn parse_rate(s: &str) -> f64 {
@@ -260,9 +396,14 @@ impl FfmpegX264 {
     }
 }
 
-fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
+fn x264_args(enc: &Encoder, dest: &Dest, speed: f64) -> Result<Vec<String>, EncodeError> {
     if enc.sc_threshold != 0 {
         return Err(EncodeError::Invalid("sc_threshold must be 0".into()));
+    }
+    if speed <= 0.0 || !speed.is_finite() {
+        return Err(EncodeError::Invalid(
+            "binding speed must be finite and > 0".into(),
+        ));
     }
     let profile = enc.profile.as_deref().unwrap_or("high");
     let preset = enc.preset.as_deref().unwrap_or("medium");
@@ -276,6 +417,21 @@ fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
         "keyint={}:min-keyint={}:scenecut=0:open-gop=0:stitchable=1:threads=1:sliced-threads=0:sync-lookahead=0",
         enc.keyint, enc.keyint
     );
+    let vf = if (speed - 1.0).abs() > 1e-9 {
+        format!(
+            "setpts=PTS/{speed:.6},scale={}:{}:flags=bicubic,fps={}",
+            dest.width,
+            dest.height,
+            dest.rate.as_f64()
+        )
+    } else {
+        format!(
+            "scale={}:{}:flags=bicubic,fps={}",
+            dest.width,
+            dest.height,
+            dest.rate.as_f64()
+        )
+    };
     Ok(vec![
         "-an".into(),
         "-c:v".into(),
@@ -291,12 +447,7 @@ fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
         "-x264-params".into(),
         params,
         "-vf".into(),
-        format!(
-            "scale={}:{}:flags=bicubic,fps={}",
-            dest.width,
-            dest.height,
-            dest.rate.as_f64()
-        ),
+        vf,
         "-movflags".into(),
         "+faststart".into(),
     ])
@@ -330,7 +481,11 @@ impl EncodeBackend for FfmpegX264 {
             "-i".into(),
             input.to_string_lossy().into_owned(),
         ];
-        args.extend(x264_args(&req.dest.encoder, req.dest)?);
+        args.extend(x264_args(
+            &req.dest.encoder,
+            req.dest,
+            req.action.binding.speed(),
+        )?);
         args.push(output.to_string_lossy().into_owned());
         let str_args: Vec<&str> = args.iter().map(String::as_str).collect();
         run_ok(&self.ffmpeg, &str_args).map_err(EncodeError::Invalid)?;
@@ -362,19 +517,137 @@ impl EncodeBackend for FfmpegX264 {
             "2".to_string(),
             "-b:a".to_string(),
             "192k".to_string(),
-            output.to_string_lossy().into_owned(),
         ];
+        let mut args = args.to_vec();
+        if (req.action.speed - 1.0).abs() > 1e-9 {
+            args.push("-filter:a".into());
+            args.push(atempo_filter(req.action.speed)?);
+        }
+        args.push(output.to_string_lossy().into_owned());
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         run_ok(&self.ffmpeg, &refs).map_err(EncodeError::Invalid)?;
         fs::read(&output).map_err(|e| EncodeError::Invalid(e.to_string()))
     }
 
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
-        let _ = (req.left, req.right, req.dest);
-        // Each SlotEncode is a closed-GOP file starting on IDR. The join is
-        // file-aligned; bitstream-copy concat is the kerf. Mid-GOP splice is
-        // a later fill of this same node.
-        Ok(Vec::new())
+        if req.action.noop {
+            return Ok(Vec::new());
+        }
+        let dir = tempfile::tempdir().map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        let left_path = dir.path().join("left.mp4");
+        let right_path = dir.path().join("right.mp4");
+        fs::write(&left_path, req.left).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        fs::write(&right_path, req.right).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        let left = probe_path(&left_path)?;
+        let right = probe_path(&right_path)?;
+        if left.starts_on_idr && right.starts_on_idr {
+            return Ok(Vec::new());
+        }
+        let gop_s = req.dest.encoder.keyint as f64 / req.dest.rate.as_f64();
+        if gop_s <= 0.0 {
+            return Err(EncodeError::Invalid(
+                r#"{"error":"kerf_unproven","reason":"dest keyint/rate cannot form a GOP"}"#.into(),
+            ));
+        }
+        let left_out = dir.path().join("left-gop.mp4");
+        let right_out = dir.path().join("right-gop.mp4");
+        let mut left_args = vec![
+            "-hide_banner".into(),
+            "-loglevel".into(),
+            "error".into(),
+            "-y".into(),
+            "-sseof".into(),
+            format!("-{gop_s:.6}"),
+            "-i".into(),
+            left_path.to_string_lossy().into_owned(),
+            "-t".into(),
+            format!("{gop_s:.6}"),
+        ];
+        left_args.extend(x264_args(&req.dest.encoder, req.dest, 1.0)?);
+        left_args.push(left_out.to_string_lossy().into_owned());
+        let left_refs: Vec<&str> = left_args.iter().map(String::as_str).collect();
+        run_ok(&self.ffmpeg, &left_refs).map_err(|e| {
+            EncodeError::Invalid(format!(
+                r#"{{"error":"kerf_unproven","reason":"left GOP encode failed: {e}"}}"#
+            ))
+        })?;
+        let mut right_args = vec![
+            "-hide_banner".into(),
+            "-loglevel".into(),
+            "error".into(),
+            "-y".into(),
+            "-ss".into(),
+            "0".into(),
+            "-i".into(),
+            right_path.to_string_lossy().into_owned(),
+            "-t".into(),
+            format!("{gop_s:.6}"),
+        ];
+        right_args.extend(x264_args(&req.dest.encoder, req.dest, 1.0)?);
+        right_args.push(right_out.to_string_lossy().into_owned());
+        let right_refs: Vec<&str> = right_args.iter().map(String::as_str).collect();
+        run_ok(&self.ffmpeg, &right_refs).map_err(|e| {
+            EncodeError::Invalid(format!(
+                r#"{{"error":"kerf_unproven","reason":"right GOP encode failed: {e}"}}"#
+            ))
+        })?;
+        let list = dir.path().join("kerf.txt");
+        let kerf_out = dir.path().join("kerf.mp4");
+        fs::write(
+            &list,
+            format!(
+                "file '{}'\nfile '{}'\n",
+                left_out.to_string_lossy().replace('\'', r"'\''"),
+                right_out.to_string_lossy().replace('\'', r"'\''")
+            ),
+        )
+        .map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        run_ok(
+            &self.ffmpeg,
+            &[
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                list.to_str().unwrap(),
+                "-c",
+                "copy",
+                kerf_out.to_str().unwrap(),
+            ],
+        )
+        .map_err(|e| {
+            EncodeError::Invalid(format!(
+                r#"{{"error":"kerf_unproven","reason":"kerf concat failed: {e}"}}"#
+            ))
+        })?;
+        let bytes = fs::read(&kerf_out).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        let probed = probe_media(&bytes)?;
+        if !probed.starts_on_idr
+            || probed.video_codec != "h264"
+            || probed.width != req.dest.width
+            || probed.height != req.dest.height
+            || probed.pix_fmt != req.dest.pix_fmt
+            || (probed.fps - req.dest.rate.as_f64()).abs() > 0.001
+        {
+            return Err(EncodeError::Invalid(format!(
+                r#"{{"error":"kerf_unproven","reason":"kerf stream {}x{} {} {} idr={} tb={} does not match dest {}x{} {} closed-GOP contract"}}"#,
+                probed.width,
+                probed.height,
+                probed.video_codec,
+                probed.pix_fmt,
+                probed.starts_on_idr,
+                probed.time_base,
+                req.dest.width,
+                req.dest.height,
+                req.dest.pix_fmt
+            )));
+        }
+        Ok(bytes)
     }
 }
 
@@ -500,6 +773,15 @@ impl ConcatBackend for FfmpegX264 {
                 "linked output is missing synchronized audio".into(),
             ));
         }
+        if has_audio {
+            let audio_s = linked.audio_duration_s.unwrap_or(0.0);
+            if (audio_s - expected_duration).abs() > tolerance {
+                return Err(ConcatError::Invalid(format!(
+                    "linked audio duration {:.3}s differs from picture {:.3}s",
+                    audio_s, expected_duration
+                )));
+            }
+        }
         Ok(muxed)
     }
 }
@@ -512,11 +794,16 @@ fn mux_audio(
 ) -> Result<Vec<u8>, ConcatError> {
     let mut list = String::new();
     for (i, part) in audio_parts.iter().enumerate() {
-        if part.empty || part.bytes.is_empty() {
-            continue;
-        }
         let path = dir.join(format!("a{i}.m4a"));
-        fs::write(&path, &part.bytes).map_err(|e| ConcatError::Invalid(e.to_string()))?;
+        let bytes = if part.empty || part.bytes.is_empty() {
+            if part.duration_s <= 0.0 {
+                continue;
+            }
+            silence_aac(ffmpeg, part.duration_s)?
+        } else {
+            part.bytes.clone()
+        };
+        fs::write(&path, bytes).map_err(|e| ConcatError::Invalid(e.to_string()))?;
         let path = path
             .to_str()
             .ok_or_else(|| ConcatError::Invalid("audio concat path".into()))?
@@ -569,7 +856,6 @@ fn mux_audio(
             "copy",
             "-c:a",
             "copy",
-            "-shortest",
             "-movflags",
             "+faststart",
             &muxed_s,
@@ -755,5 +1041,208 @@ mod tests {
             .blob;
         let mp4 = store.get_blob(Kind::Concat, &dest_id).unwrap();
         assert!(mp4.windows(4).any(|w| w == b"ftyp"));
+        let kerf = second
+            .graph
+            .kerfs
+            .iter()
+            .find(|k| k.left == "hook")
+            .unwrap();
+        let kerf_bytes = store
+            .get_blob(
+                Kind::Kerf,
+                &store.get_action(&kerf.key).unwrap().unwrap().blob,
+            )
+            .unwrap();
+        assert!(kerf_bytes.is_empty());
+    }
+
+    fn bind_speed(material: &str, in_s: f64, out_s: f64, speed: f64) -> Binding {
+        Binding {
+            material: material.into(),
+            source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
+            params: Some(serde_json::json!({ "speed": speed })),
+            audio: None,
+        }
+    }
+
+    #[test]
+    fn speed_retime_invalidates_only_that_slot_on_x264() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip speed_retime_invalidates_only_that_slot_on_x264 — install ffmpeg");
+            return;
+        };
+        let score = score();
+        let dest = dest();
+        let store = Memory::new();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 2.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let scion = |hook_speed: f64, hook_out: f64| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert(
+                "hook".into(),
+                bind_speed(hook.as_str(), 0.0, hook_out, hook_speed),
+            );
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(1.0, 1.0), &store, &ff, &ff).unwrap();
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let second = compile(&score, &scion(2.0, 2.0), &store, &ff, &ff).unwrap();
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "hook")
+                .unwrap()
+                .cache,
+            "miss"
+        );
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+        let hook_key = second
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "hook")
+            .unwrap()
+            .key
+            .clone();
+        let hook_mp4 = store
+            .get_blob(
+                Kind::SlotEncode,
+                &store.get_action(&hook_key).unwrap().unwrap().blob,
+            )
+            .unwrap();
+        let probed = probe_media(&hook_mp4).unwrap();
+        assert!((probed.duration_s - 1.0).abs() < 0.15);
+    }
+
+    fn mid_gop_copy(ff: &FfmpegX264, color: &str) -> Vec<u8> {
+        let long = color_mp4(ff, color, 3.2, 64);
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("long.mp4");
+        let out = dir.path().join("mid.mp4");
+        fs::write(&src, long).unwrap();
+        run_ok(
+            &ff.ffmpeg,
+            &[
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-ss",
+                "0.35",
+                "-i",
+                src.to_str().unwrap(),
+                "-t",
+                "1.0",
+                "-c",
+                "copy",
+                out.to_str().unwrap(),
+            ],
+        )
+        .expect("mid-GOP copy");
+        fs::read(&out).unwrap()
+    }
+
+    #[test]
+    fn non_idr_join_fills_kerf_without_rewriting_closed_gop_slots() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!(
+                "skip non_idr_join_fills_kerf_without_rewriting_closed_gop_slots — install ffmpeg"
+            );
+            return;
+        };
+        let dest = dest();
+        let closed = color_mp4(&ff, "green", 1.2, 64);
+        let closed_probe = probe_media(&closed).unwrap();
+        assert!(closed_probe.starts_on_idr);
+        let empty = ff
+            .encode_kerf(&KerfEncodeRequest {
+                action: &crate::graph::KerfAction {
+                    left: "hook".into(),
+                    right: "body".into(),
+                    key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"t":"closed"})),
+                    left_key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"l":1})),
+                    right_key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"r":1})),
+                    transition: "cut".into(),
+                    grain: Grain::Gop { keyint: 10 },
+                    noop: false,
+                },
+                dest: &dest,
+                left: &closed,
+                right: &closed,
+            })
+            .unwrap();
+        assert!(empty.is_empty());
+
+        let mid = mid_gop_copy(&ff, "red");
+        let mid_probe = probe_media(&mid).unwrap();
+        if mid_probe.starts_on_idr {
+            eprintln!("skip non-IDR kerf fill — stream copy still started on IDR");
+            return;
+        }
+        let filled = ff
+            .encode_kerf(&KerfEncodeRequest {
+                action: &crate::graph::KerfAction {
+                    left: "hook".into(),
+                    right: "body".into(),
+                    key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"t":"open"})),
+                    left_key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"l":2})),
+                    right_key: graft_cas::ActionKey::from_canonical(&serde_json::json!({"r":2})),
+                    transition: "cut".into(),
+                    grain: Grain::Gop { keyint: 10 },
+                    noop: false,
+                },
+                dest: &dest,
+                left: &mid,
+                right: &mid,
+            })
+            .unwrap();
+        assert!(!filled.is_empty());
+        let kerf = probe_media(&filled).unwrap();
+        assert!(kerf.starts_on_idr);
+        assert_eq!(kerf.video_codec, "h264");
+        assert!(!closed.is_empty());
     }
 }

@@ -22,12 +22,13 @@ pub fn slot_encode_key(slot: &Slot, binding: &Binding, dest: &Dest) -> ActionKey
     ActionKey::from_canonical(&value)
 }
 
-pub fn audio_encode_key(slot: &Slot, binding: &AudioBinding, dest: &Dest) -> ActionKey {
+pub fn audio_encode_key(slot: &Slot, binding: &AudioBinding, speed: f64, dest: &Dest) -> ActionKey {
     ActionKey::from_canonical(&json!({
         "action": "audio_encode",
         "slot": slot.id,
         "material": binding.material,
         "source": binding.source,
+        "speed": speed,
         "codec": "aac",
         "sample_rate": 48000,
         "channels": 2,

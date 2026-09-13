@@ -16,6 +16,7 @@ pub trait ConcatBackend {
 pub struct ConcatPartBytes {
     pub empty: bool,
     pub bytes: Vec<u8>,
+    pub duration_s: f64,
 }
 
 pub struct ConcatRequest<'a> {

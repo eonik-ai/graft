@@ -102,6 +102,30 @@ impl IntraSeq {
         })
     }
 
+    /// Nearest-neighbor resample to a dest frame count (`source_duration / speed`).
+    pub fn resample_frames(&self, dest_frames: usize) -> Result<Self, EncodeError> {
+        if dest_frames == 0 {
+            return Err(EncodeError::Invalid("retime dest frame count is 0".into()));
+        }
+        if dest_frames == self.frames.len() {
+            return Ok(self.clone());
+        }
+        let src_n = self.frames.len() as f64;
+        let frames = (0..dest_frames)
+            .map(|i| {
+                let src = ((i as f64 + 0.5) * src_n / dest_frames as f64).floor() as usize;
+                self.frames[src.min(self.frames.len() - 1)].clone()
+            })
+            .collect();
+        Ok(Self {
+            width: self.width,
+            height: self.height,
+            fps_num: self.fps_num,
+            fps_den: self.fps_den,
+            frames,
+        })
+    }
+
     pub fn concat_seqs(parts: &[Self]) -> Result<Self, ConcatError> {
         let Some(first) = parts.first() else {
             return Err(ConcatError::Invalid("concat has no parts".into()));
@@ -198,7 +222,13 @@ impl EncodeBackend for FrameIntra {
             )));
         }
         let sliced = seq.slice_seconds(req.action.binding.in_s(), req.action.binding.out_s())?;
-        Ok(sliced.encode())
+        let dest_frames = req.action.slot.range.duration as usize;
+        let retimed = if dest_frames == sliced.frames.len() {
+            sliced
+        } else {
+            sliced.resample_frames(dest_frames)?
+        };
+        Ok(retimed.encode())
     }
 
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
@@ -441,5 +471,88 @@ mod tests {
         assert_eq!(body_seq.frames.len(), 20);
         assert_eq!(body_seq.frames[0], paint_frame(4, 4, 10, 0));
         assert_eq!(body_seq.frames[19], paint_frame(4, 4, 10, 19));
+    }
+
+    fn bind_speed(material: &str, in_s: f64, out_s: f64, speed: f64) -> Binding {
+        Binding {
+            material: material.into(),
+            source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
+            params: Some(serde_json::json!({ "speed": speed })),
+            audio: None,
+        }
+    }
+
+    #[test]
+    fn speed_retime_changes_hook_frames_and_keeps_body_hit() {
+        let score = intra_score();
+        let dest = intra_dest();
+        let store = Memory::new();
+        let backend = FrameIntra;
+        let hook = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 25, 2).encode())
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 25, 10).encode())
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 20).encode())
+            .unwrap();
+        let scion = |hook_speed: f64, hook_out: f64| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert(
+                "hook".into(),
+                bind_speed(hook.as_str(), 0.0, hook_out, hook_speed),
+            );
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(1.0, 1.0), &store, &backend, &backend).unwrap();
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let second = compile(&score, &scion(2.0, 2.0), &store, &backend, &backend).unwrap();
+        let hook_plan = second.plan.slots.iter().find(|s| s.id == "hook").unwrap();
+        let body_plan = second.plan.slots.iter().find(|s| s.id == "body").unwrap();
+        let cta_plan = second.plan.slots.iter().find(|s| s.id == "cta").unwrap();
+        assert_eq!(hook_plan.cache, "miss");
+        assert_eq!(body_plan.cache, "hit");
+        assert_eq!(cta_plan.cache, "hit");
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+        let hook_key = second
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "hook")
+            .unwrap()
+            .key
+            .clone();
+        let hook_bytes = store
+            .get_blob(
+                Kind::SlotEncode,
+                &store.get_action(&hook_key).unwrap().unwrap().blob,
+            )
+            .unwrap();
+        assert_eq!(IntraSeq::decode(&hook_bytes).unwrap().frames.len(), 10);
     }
 }

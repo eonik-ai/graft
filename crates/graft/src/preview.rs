@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use graft_cas::{BlobId, Fs, Kind, Store};
-use graft_score::{effective_bindings, Scion, Score};
+use graft_score::{effective_bindings, Binding, Scion, Score};
 
 pub fn render(project: &Path, score: &Score, scion: &Scion, store: &Fs, out: &Path) -> Result<()> {
     let bindings = effective_bindings(score, scion)?;
@@ -18,6 +18,12 @@ pub fn render(project: &Path, score: &Score, scion: &Scion, store: &Fs, out: &Pa
     ];
     let mut filters = Vec::new();
     let mut inputs = 0usize;
+    let mut audio_labels = Vec::new();
+    let any_audio = score
+        .spine()
+        .into_iter()
+        .filter_map(|slot| bindings.get(&slot.id))
+        .any(|binding| binding.audio.is_some());
     for slot in score.spine() {
         let Some(binding) = bindings.get(&slot.id) else {
             continue;
@@ -28,30 +34,56 @@ pub fn render(project: &Path, score: &Score, scion: &Scion, store: &Fs, out: &Pa
         std::fs::write(&path, bytes)?;
         args.push("-i".into());
         args.push(path.to_string_lossy().into_owned());
+        let speed = binding.speed();
+        let setpts = if (speed - 1.0).abs() > 1e-9 {
+            format!("setpts=(PTS-STARTPTS)/{speed:.6}")
+        } else {
+            "setpts=PTS-STARTPTS".into()
+        };
         filters.push(format!(
-            "[{inputs}:v]trim=start={:.6}:end={:.6},setpts=PTS-STARTPTS,scale={}:{},fps={}[v{inputs}]",
+            "[{inputs}:v]trim=start={:.6}:end={:.6},{setpts},scale={}:{},fps={}[v{inputs}]",
             binding.in_s(),
             binding.out_s(),
             scion.dest.width.min(960),
             scion.dest.height.min(960),
             scion.dest.rate.as_f64()
         ));
+        if any_audio {
+            audio_labels.push(preview_audio_filter(
+                inputs,
+                binding,
+                slot.range.duration,
+                &scion.dest.rate,
+                &mut args,
+                &mut filters,
+            )?);
+        }
         inputs += 1;
     }
     if inputs == 0 {
         bail!("preview has no bound picture slots");
     }
-    let labels = (0..inputs)
-        .map(|i| format!("[v{i}]"))
-        .collect::<Vec<_>>()
-        .join("");
-    filters.push(format!("{labels}concat=n={inputs}:v=1:a=0[outv]"));
+    if any_audio {
+        let paired = (0..inputs)
+            .map(|i| format!("[v{i}]{}", audio_labels[i]))
+            .collect::<Vec<_>>()
+            .join("");
+        filters.push(format!("{paired}concat=n={inputs}:v=1:a=1[outv][outa]"));
+    } else {
+        let vlabels = (0..inputs)
+            .map(|i| format!("[v{i}]"))
+            .collect::<Vec<_>>()
+            .join("");
+        filters.push(format!("{vlabels}concat=n={inputs}:v=1:a=0[outv]"));
+    }
+    args.extend(["-filter_complex".into(), filters.join(";")]);
+    args.extend(["-map".into(), "[outv]".into()]);
+    if any_audio {
+        args.extend(["-map".into(), "[outa]".into(), "-c:a".into(), "aac".into()]);
+    } else {
+        args.push("-an".into());
+    }
     args.extend([
-        "-filter_complex".into(),
-        filters.join(";"),
-        "-map".into(),
-        "[outv]".into(),
-        "-an".into(),
         "-c:v".into(),
         "libx264".into(),
         "-preset".into(),
@@ -87,4 +119,59 @@ pub fn render(project: &Path, score: &Score, scion: &Scion, store: &Fs, out: &Pa
     }
     eprintln!("wrote {}", out.display());
     Ok(())
+}
+
+fn preview_audio_filter(
+    inputs: usize,
+    binding: &Binding,
+    dest_frames: u64,
+    dest_rate: &graft_score::FrameRate,
+    args: &mut Vec<String>,
+    filters: &mut Vec<String>,
+) -> Result<String> {
+    let speed = binding.speed();
+    let dest_s = dest_rate.seconds_from_frames(dest_frames as i64);
+    if let Some(audio) = &binding.audio {
+        let atempo = if (speed - 1.0).abs() > 1e-9 {
+            format!(",{}", atempo_chain(speed)?)
+        } else {
+            String::new()
+        };
+        filters.push(format!(
+            "[{inputs}:a]atrim=start={:.6}:end={:.6},asetpts=PTS-STARTPTS{atempo}[a{inputs}]",
+            audio.source.start_seconds(),
+            audio.source.end_seconds()
+        ));
+        Ok(format!("[a{inputs}]"))
+    } else {
+        args.extend([
+            "-f".into(),
+            "lavfi".into(),
+            "-t".into(),
+            format!("{dest_s:.6}"),
+            "-i".into(),
+            "anullsrc=r=48000:cl=stereo".into(),
+        ]);
+        let silence = args.iter().filter(|a| *a == "-i").count() - 1;
+        filters.push(format!("[{silence}:a]asetpts=PTS-STARTPTS[a{inputs}]"));
+        Ok(format!("[a{inputs}]"))
+    }
+}
+
+fn atempo_chain(speed: f64) -> Result<String> {
+    if speed <= 0.0 || !speed.is_finite() {
+        bail!("binding speed must be finite and > 0");
+    }
+    let mut remaining = speed;
+    let mut parts = Vec::new();
+    while remaining > 2.0 + 1e-9 {
+        parts.push("atempo=2.0".into());
+        remaining /= 2.0;
+    }
+    while remaining < 0.5 - 1e-9 {
+        parts.push("atempo=0.5".into());
+        remaining *= 2.0;
+    }
+    parts.push(format!("atempo={remaining:.6}"));
+    Ok(parts.join(","))
 }

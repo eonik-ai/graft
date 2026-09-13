@@ -88,7 +88,10 @@ Schedule:
    blobs; encode only misses.
 
 Retiming a slot (speed ≠ 1, or span length change) invalidates that
-slot’s action key; the slot re-encodes in full.
+slot’s action key; the slot re-encodes in full. `graft-intra` resamples
+the sliced frame pack to the dest frame count (`source_duration / speed`).
+`FfmpegX264` applies `setpts` and chained `atempo` so picture and AAC
+stay locked. Feedback still does not invent a speed.
 
 ## Grain
 
@@ -106,11 +109,15 @@ Long-GOP (`impl: x264`): graft shells out to **system** ffmpeg/`libx264`
 with `keyint` = `min-keyint`, `scenecut=0`, `threads=1`. Each slot
 encode is a closed-GOP mp4 starting on IDR. Concat is `ffmpeg -c copy`
 after probing parts for size, fps, codec, pix_fmt, color, and time base.
-The hook→body kerf node still misses when the hook key changes; its
-artifact is empty at an IDR-aligned join. Body `BlobId` is unchanged
-across a hook swap. Mid-GOP splice (re-encode straddling GOPs from one
-long timeline encode) is the same node, later. Synchronized AAC audio
-is cached independently and muxed after the video link.
+The hook→body kerf node still misses when the hook key changes. At a
+file-aligned closed-GOP IDR join the artifact is empty and concat is
+bitstream copy. When a slot file does not start on IDR, the same node
+encodes one GOP each side into a real kerf blob, then probes codec,
+geometry, fps, and IDR before concat. If repair cannot be proven, compile
+fails with a machine-readable `kerf_unproven` reason and does not
+silently re-encode a clean body. Synchronized AAC audio is cached
+independently, padded with silence when a spine slot lacks audio, and
+muxed after the video link; muxed audio duration must match picture.
 
 Do not statically link x264 into the Apache-2.0 binary.
 

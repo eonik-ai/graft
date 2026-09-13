@@ -55,17 +55,22 @@ Die Wiedergabequelle ist [`landing.cast`](docs/assets/landing.cast)._
 - Semantischen diff und Drei-Wege-merge ohne Medien-Merge zeigen
 - Benannte `hook`-, `body`-, `proof`- und `cta`-slots zu einem dest compilieren
 - Synchrones AAC getrennt cachen und mit dem Videolink muxen
+- Aufgezeichnetes `params.speed` anwenden (setpts/atempo oder intra-Resample),
+  ohne benachbarte saubere slots dirty zu machen
+- Ein Long-GOP-kerf füllen, wenn der Schnitt nicht IDR-ausgerichtet ist;
+  leeres kerf an closed-GOP-Dateischnitten
 - Einen geänderten hook neu encoden und den unveränderten body bitstream-kopieren
 - `hook_rate` über das deklarierte Fenster und die ausgelieferte time map auflösen
 - Eine begrenzte OTIO-Teilmenge mit Verlustbericht exportieren/importieren
-- Einen gewählten scion per Decode und Composite previewen
+- Einen gewählten scion per Decode und Composite previewen, mit Sync-Audio
 - Blobs zu einer object-store-Wurzel mit Missing-Blob-Entdeckung synchronisieren
 
 ## Was es nicht kann
 
-graft wendet kein speed/retime an, repariert keine beliebigen Mid-GOP-Quellen
-und rundet keine NLE-Effects, Grades oder Generators. Es ist kein Git-auf-Pixeln,
-kein Ersatz für Git-Historie, kein Lock-Server, kein DAM und kein Review-Werkzeug.
+graft repariert keine beliebigen Mid-GOP-Timelines, erfindet kein speed aus
+Feedback und rundet keine NLE-Effects, Grades oder Generators. Es ist kein
+Git-auf-Pixeln, kein Ersatz für Git-Historie, kein Lock-Server, kein DAM
+und kein Review-Werkzeug.
 
 Der sequenzielle Compiler, der Action-Graph, das Dateisystem-CAS, der
 object-store-Transport, das Frame-Grain-Backend und der System-ffmpeg/x264-Pfad

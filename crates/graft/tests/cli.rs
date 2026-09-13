@@ -656,6 +656,8 @@ fn founding_loop_on_generated_media() {
         &["preview", "--scion", "9x16", "--out", "preview.mp4"],
     );
     assert!(dir.join("preview.mp4").is_file());
+    assert!(probe_has_audio(&dir.join("preview.mp4")));
+    assert!(probe_has_audio(&dir.join("ad.mp4")));
     let remote = dir.join("object-store");
     let pushed = run_ok(
         &dir,
@@ -665,5 +667,119 @@ fn founding_loop_on_generated_media() {
         .as_array()
         .map(|rows| !rows.is_empty())
         .unwrap_or(false));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn probe_has_audio(path: &Path) -> bool {
+    let ffprobe = std::env::var("FFPROBE").unwrap_or_else(|_| "ffprobe".into());
+    Command::new(ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .map(|out| out.status.success() && !out.stdout.is_empty())
+        .unwrap_or(false)
+}
+
+#[test]
+fn speed_retime_and_preview_audio_on_generated_media() {
+    if !ffmpeg_available() {
+        eprintln!("skip speed_retime_and_preview_audio_on_generated_media — install ffmpeg");
+        return;
+    }
+    let dir = tmp("retime-preview");
+    run_ok(&dir, &["init"]);
+    run_ok(&dir, &["slot", "hook", "--span", "0-1", "--window", "0-1"]);
+    run_ok(&dir, &["slot", "body", "--span", "1-3"]);
+    run_ok(
+        &dir,
+        &[
+            "scion",
+            "create",
+            "ad",
+            "--dest",
+            "64x64",
+            "--encoder",
+            "x264",
+        ],
+    );
+    let hook = write_color(&dir, "hook.mp4", "red", "2.2", "10");
+    let body = write_color(&dir, "body.mp4", "green", "2.2", "10");
+    run_ok(
+        &dir,
+        &[
+            "bind",
+            "hook",
+            hook.to_str().unwrap(),
+            "--in",
+            "0",
+            "--out",
+            "1",
+        ],
+    );
+    run_ok(
+        &dir,
+        &[
+            "bind",
+            "body",
+            body.to_str().unwrap(),
+            "--in",
+            "0",
+            "--out",
+            "2",
+        ],
+    );
+    let first = run_ok(&dir, &["compile", "--out", "one.mp4"]);
+    let warmed = run_ok(&dir, &["compile", "--out", "one-warm.mp4"]);
+    let body_blob = warmed["plan"]["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|slot| slot["id"] == "body")
+        .unwrap()["blob"]
+        .clone();
+    run_ok(
+        &dir,
+        &[
+            "bind",
+            "hook",
+            hook.to_str().unwrap(),
+            "--in",
+            "0",
+            "--out",
+            "2",
+            "--speed",
+            "2",
+        ],
+    );
+    let second = run_ok(&dir, &["compile", "--out", "sped.mp4"]);
+    let hook2 = second["plan"]["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|slot| slot["id"] == "hook")
+        .unwrap();
+    let body2 = second["plan"]["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|slot| slot["id"] == "body")
+        .unwrap();
+    assert_eq!(hook2["cache"], "miss");
+    assert_eq!(body2["cache"], "hit");
+    assert_eq!(body2["blob"], body_blob);
+    run_ok(&dir, &["preview", "--out", "preview.mp4"]);
+    assert!(dir.join("preview.mp4").is_file());
+    assert!(probe_has_audio(&dir.join("preview.mp4")));
+    assert!(probe_has_audio(&dir.join("sped.mp4")));
+    assert_eq!(first["plan"]["encode"], true);
     let _ = fs::remove_dir_all(&dir);
 }

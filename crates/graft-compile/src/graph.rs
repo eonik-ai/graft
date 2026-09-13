@@ -21,6 +21,7 @@ pub struct AudioEncodeAction {
     pub binding: AudioBinding,
     pub key: ActionKey,
     pub material: BlobId,
+    pub speed: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -93,8 +94,9 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
             audio.push(AudioEncodeAction {
                 slot: (*slot).clone(),
                 binding: audio_binding.clone(),
-                key: audio_encode_key(slot, audio_binding, &scion.dest),
+                key: audio_encode_key(slot, audio_binding, binding.speed(), &scion.dest),
                 material: audio_material,
+                speed: binding.speed(),
             });
         }
     }
