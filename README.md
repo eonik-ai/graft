@@ -1,11 +1,13 @@
-[![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-
 <h1 align="center">
-  <img src="docs/brand/lockup.png" width="280" alt="graft">
+  <img src="docs/brand/lockup.png" width="260" alt="graft">
 </h1>
 
-graft is a compiler for video composition.
+<p align="center">a compiler for video composition</p>
+
+<p align="center">
+  <a href="https://github.com/eonik-ai/graft/actions/workflows/ci.yml"><img src="https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="Apache-2.0"></a>
+</p>
 
 The score is source. Essence is immutable. The mp4 is a compile.
 You graft a new hook. The body stays.
@@ -92,6 +94,7 @@ graft export otio|fcpxml|imf|mp4
 | [docs/adapters.md](docs/adapters.md) | Loss matrix |
 | [docs/comparison.md](docs/comparison.md) | git, OTIO, IMF, Vit, Aspect |
 | [docs/roadmap.md](docs/roadmap.md) | 0.1 → 1.0 |
+| [docs/brand/](docs/brand/) | Mark: two clips, one join |
 | [docs/adr/](docs/adr/) | Decisions already made |
 
 Normative machine contract: [`schema/`](schema/).
