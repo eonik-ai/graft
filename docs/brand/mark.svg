@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 96" fill="none" role="img" aria-label="graft">
+  <title>graft</title>
+  <defs>
+    <linearGradient id="join" x1="78" y1="18" x2="118" y2="78" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9BB0FF"/>
+      <stop offset="42%" stop-color="#6EC8E0"/>
+      <stop offset="100%" stop-color="#3ED89A"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="12" width="92" height="72" rx="18" stroke="#3D4458" stroke-width="11"/>
+  <rect x="17" y="28" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <rect x="17" y="43.5" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <rect x="17" y="59" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <rect x="120" y="12" width="92" height="72" rx="18" stroke="#3D4458" stroke-width="11"/>
+  <rect x="194" y="28" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <rect x="194" y="43.5" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <rect x="194" y="59" width="9" height="9" rx="2.5" fill="#12141C"/>
+  <path d="M76 24 L136 48 L76 72" stroke="url(#join)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

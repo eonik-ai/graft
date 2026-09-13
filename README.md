@@ -1,7 +1,9 @@
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-# graft
+<h1 align="center">
+  <img src="docs/brand/lockup.png" width="280" alt="graft">
+</h1>
 
 graft is a compiler for video composition.
 

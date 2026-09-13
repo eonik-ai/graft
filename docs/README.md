@@ -15,4 +15,5 @@ The machine contract is [`../schema`](../schema/).
 | [adapters.md](adapters.md) | Loss matrix |
 | [comparison.md](comparison.md) | Nearby tools |
 | [roadmap.md](roadmap.md) | 0.1 → 1.0 |
+| [brand/](brand/) | Mark: two clips, one join |
 | [adr/](adr/) | Decisions already made |

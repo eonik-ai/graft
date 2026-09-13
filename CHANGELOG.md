@@ -7,6 +7,10 @@ is unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- Project mark: two clips, one join (`docs/brand/`).
+
 ## [0.1.0] - 2026-09-13
 
 ### Added
