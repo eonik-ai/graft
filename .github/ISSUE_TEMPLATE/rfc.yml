@@ -1,0 +1,53 @@
+name: RFC
+description: Propose a schema, dirty-set, cache-key, or adapter-loss change.
+title: "rfc: "
+labels: ["rfc"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Schema and principle changes need an RFC **before** a PR. See CONTRIBUTING.md.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - score / scion / time-map schema
+        - signal → dirty set
+        - cache key / kerf
+        - slot roles
+        - adapter loss matrix
+        - license / governance
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What cannot be expressed or what is incorrect today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Concrete field names, rule changes, or loss claims.
+    validations:
+      required: true
+  - type: textarea
+    id: north-star
+    attributes:
+      label: Worked example
+      description: How does hook_v3 + body_v1 @ 9x16 behave after this change?
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Principles
+      options:
+        - label: I have read docs/principles.md and this does not mix recipe / essence / build.
+          required: true
+        - label: I am not claiming lossless NLE round-trip without a fixture.
+          required: true

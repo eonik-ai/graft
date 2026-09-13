@@ -1,0 +1,46 @@
+{
+  "graft": "0.1.0",
+  "id": "hook_v3+body_v1+cta_v1@9x16",
+  "concept": "6f8c2e14-9a71-4d3b-b0e6-1c4d8a7f92ab",
+  "dest": {
+    "id": "9x16",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "pix_fmt": "yuv420p",
+    "color": "bt709",
+    "encoder": {
+      "impl": "x264",
+      "version": "r3222",
+      "profile": "high",
+      "level": "4.1",
+      "rate_control": {
+        "mode": "crf",
+        "crf": 18
+      },
+      "preset": "medium",
+      "keyint": 30,
+      "sc_threshold": 0
+    }
+  },
+  "bindings": {
+    "hook": {
+      "material": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "in_s": 0.4,
+      "out_s": 3.4,
+      "params": { "speed": 1.0 }
+    },
+    "body": {
+      "material": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "in_s": 1.2,
+      "out_s": 18.2,
+      "params": { "speed": 1.0 }
+    },
+    "cta": {
+      "material": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "in_s": 0.0,
+      "out_s": 3.0,
+      "params": { "speed": 1.0 }
+    }
+  }
+}

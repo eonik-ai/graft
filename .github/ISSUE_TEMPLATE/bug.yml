@@ -1,0 +1,29 @@
+name: Bug
+description: Something in the schema, example, or reference tests is wrong.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues. Security reports go to SECURITY.md, not here.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What the spec or test should do.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead. Paste `make test` output if relevant.
+    validations:
+      required: true
+  - type: input
+    id: example
+    attributes:
+      label: Fixture
+      description: Path under examples/ if any.
+      placeholder: examples/hook-v3-body-v1-9x16/

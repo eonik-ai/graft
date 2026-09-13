@@ -1,0 +1,13 @@
+{
+  "graft": "0.1.0",
+  "signal": {
+    "kind": "hook_rate",
+    "t0_s": 0.0,
+    "t1_s": 3.0,
+    "dest_id": "9x16"
+  },
+  "slots": ["hook"],
+  "kerfs": [["hook", "body"]],
+  "clean": ["body", "cta"],
+  "warnings": []
+}

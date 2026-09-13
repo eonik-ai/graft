@@ -1,0 +1,34 @@
+name: Adapter
+description: Propose a guest import/export (lossy by default).
+title: "docs(adapters): "
+labels: ["adapter"]
+body:
+  - type: input
+    id: guest
+    attributes:
+      label: Guest
+      placeholder: OTIO, FCPXML, CapCut draft JSON, …
+    validations:
+      required: true
+  - type: textarea
+    id: loss
+    attributes:
+      label: Loss
+      description: What cannot round-trip. Default is "effects, color, plugins."
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Direction
+      options:
+        - export only
+        - import only
+        - both (lossy)
+    validations:
+      required: true
+  - type: input
+    id: spec-url
+    attributes:
+      label: Official schema or API
+      placeholder: https://…

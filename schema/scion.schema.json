@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:graft:schema:scion:0.1.0",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "graft scion",
+  "description": "A named variant: concept + bindings + dest. 9:16 is a dest, not a slot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["graft", "id", "concept", "dest", "bindings"],
+  "properties": {
+    "graft": { "const": "0.1.0" },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human id, e.g. hook_v3+body_v1+cta_v1@9x16"
+    },
+    "concept": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dest": { "$ref": "#/$defs/dest" },
+    "bindings": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/binding" }
+    }
+  },
+  "$defs": {
+    "material": {
+      "type": "string",
+      "pattern": "^blake3:[0-9a-f]{64}$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material", "in_s", "out_s"],
+      "properties": {
+        "material": { "$ref": "#/$defs/material" },
+        "in_s": { "type": "number", "minimum": 0 },
+        "out_s": { "type": "number", "minimum": 0 },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "speed": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "dest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "width", "height", "fps", "pix_fmt", "color", "encoder"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "pix_fmt": { "type": "string", "minLength": 1 },
+        "color": { "type": "string", "minLength": 1 },
+        "encoder": { "$ref": "#/$defs/encoder" }
+      }
+    },
+    "encoder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["impl", "version", "profile", "keyint", "sc_threshold"],
+      "properties": {
+        "impl": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "profile": { "type": "string" },
+        "level": { "type": "string" },
+        "rate_control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["crf", "bitrate"] },
+            "crf": { "type": "number" },
+            "bitrate": { "type": "string" }
+          }
+        },
+        "preset": { "type": "string" },
+        "keyint": { "type": "integer", "minimum": 1 },
+        "sc_threshold": { "type": "integer", "const": 0 }
+      }
+    }
+  }
+}

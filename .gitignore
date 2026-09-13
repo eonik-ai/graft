@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# secrets
+.env
+.env.*
+!.env.example
+credentials.json
+*.pem
+
+# essence — never commit media
+*.mov
+*.mp4
+*.mxf
+*.mkv
+*.webm
+*.wav
+*.aiff
+*.r3d
+*.braw
+
+# python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# rust (future)
+/target/
+**/*.rs.bk
+
+# editors
+.idea/
+.vscode/
+*.swp

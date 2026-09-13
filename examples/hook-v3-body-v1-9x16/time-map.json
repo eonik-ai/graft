@@ -1,0 +1,10 @@
+{
+  "graft": "0.1.0",
+  "scion": "hook_v3+body_v1+cta_v1@9x16",
+  "dest_id": "9x16",
+  "entries": [
+    { "span": [0.0, 3.0], "slot": "hook" },
+    { "span": [3.0, 20.0], "slot": "body" },
+    { "span": [20.0, 23.0], "slot": "cta" }
+  ]
+}
