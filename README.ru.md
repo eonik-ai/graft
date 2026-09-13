@@ -1,11 +1,21 @@
-[English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · Русский
+<div align="center">
+  <a href="https://github.com/eonik-ai/graft"><img src="docs/brand/mark.png" alt="Два клипа. Одно соединение." width="120" /></a>
+  <h1>graft</h1>
+  <p><strong>Меняйте hook. Сохраняйте body.</strong></p>
+  <p>
+    <a href="README.md">English</a> ·
+    <a href="README.es.md">Español</a> ·
+    <a href="README.pt-BR.md">Português</a> ·
+    <a href="README.fr.md">Français</a> ·
+    <a href="README.zh-CN.md">简体中文</a> ·
+    <a href="README.ja.md">日本語</a> ·
+    <a href="README.ko.md">한국어</a> ·
+    <a href="README.de.md">Deutsch</a> ·
+    <strong>Русский</strong>
+  </p>
+</div>
 
-<img src="docs/brand/mark.png" width="96" align="right" alt="Два клипа. Одно соединение.">
-
-# graft
-
-[![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
-[![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+---
 
 score — источник. essence неизменна. mp4 — результат компиляции.
 Подставляете новый hook. body остаётся.
@@ -13,8 +23,6 @@ score — источник. essence неизменна. mp4 — результа
 git версионирует **score** (JSON). CAS версионирует essence. action cache
 версионирует кодирования, поэтому смена hook копирует body битстримом.
 graft — не NLE. Среда выполнения — **ffmpeg** и **ffprobe** в `PATH`.
-
-[Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [соседние инструменты](docs/comparison.md)
 
 ![graft CLI компилирует, привязывает другой hook и сохраняет body и cta чистыми](docs/assets/landing.gif)
 

@@ -28,7 +28,7 @@ Filenames follow [standard-readme i18n](https://github.com/RichardLitt/standard-
 
 Leave these verbatim:
 
-- the project and CLI name `graft` (always lowercase; the H1 is `# graft`)
+- the project and CLI name `graft` (always lowercase; the H1 text is `graft`)
 - commands, flags, JSON keys, hashes, crate names
 - `ffmpeg`, `ffprobe`, `x264`, `GFI1`, Apache-2.0, crate versions, tag names
 - glossary nouns that are schema words: `score`, `slot`, `scion`, `kerf`,
@@ -38,8 +38,9 @@ Translate prose, section titles, and the mark `alt`. The `alt` describes the
 drawing (two clips, one join), never the word `graft`.
 
 Do not put [`docs/brand/wordmark.png`](brand/wordmark.png) on a README. It is
-white type for dark fields. Do not mint a lockup. Do not use the mark as an
-`<h1>`.
+white type for dark fields. Do not mint a lockup asset. The organizational
+README header keeps `mark.png` and the crawlable `<h1>graft</h1>` as separate
+elements.
 
 ## Adding a locale
 
@@ -47,8 +48,8 @@ white type for dark fields. Do not mint a lockup. Do not use the mark as an
 2. Translate prose. Keep code fences identical.
 3. Put a language bar on the new file and on **every** existing README
    (same order as the English bar). The current locale is plain text, not a
-   link. Native names: English · 简体中文 · 日本語 · 한국어 · Español ·
-   Português (Brasil) · Français · Deutsch · Русский.
+   link. Keep the organizational order: English · Español · Português ·
+   Français · 简体中文 · 日本語 · 한국어 · Deutsch · Русский.
 4. Link the new file from this table.
 
 ## Stale siblings

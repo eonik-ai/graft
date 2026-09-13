@@ -28,9 +28,11 @@ crates.io is not published (`publish = false`).
 
 ### Changed
 
-- README is a tool-first compiler landing page: text H1 `# graft`, mark as
-  a mark, real CLI movie, first compile, how it works, project status, next
-  steps, language bar, and eight first-party siblings.
+- README follows the eonik organization structure: centered identity,
+  crawlable `graft` H1, promise, navigation, flat-square badges, languages,
+  repository boundary, capabilities, non-capabilities, install, security,
+  related docs, license. The real CLI movie and eight first-party siblings
+  remain.
 - README matches the product: mp4 via ffmpeg; example JSON is plan-only.
 - MSRV 1.85; CI remains 1.98.1.
 

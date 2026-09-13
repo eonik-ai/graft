@@ -5,7 +5,9 @@ Two clips. One join.
 Left frame is the new take. Right frame is the body that stays. The
 chevron is the graft — the only place the compiler rewrites.
 
-The drawing is [mark.png](mark.png). There is no lockup.
+The drawing is [mark.png](mark.png). There is no lockup asset. Repository
+READMEs may compose the mark above a separate, crawlable `<h1>graft</h1>`;
+never rasterize those elements into a new image.
 
 ## Files
 
@@ -31,8 +33,8 @@ The drawing is [mark.png](mark.png). There is no lockup.
 - Drop the sprockets.
 - Put the new take on the right.
 - Sit the white wordmark on a light page.
-- Draw a second `graft` under the mark.
-- Mint a lockup or a dark/light duplicate of the mark.
+- Draw `graft` into the mark image.
+- Mint a lockup asset or a dark/light duplicate of the mark.
 
 ## Trademark
 

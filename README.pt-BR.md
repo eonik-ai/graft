@@ -1,11 +1,21 @@
-[English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · Português (Brasil) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
+<div align="center">
+  <a href="https://github.com/eonik-ai/graft"><img src="docs/brand/mark.png" alt="Dois clips. Uma emenda." width="120" /></a>
+  <h1>graft</h1>
+  <p><strong>Mude o hook. Mantenha o body.</strong></p>
+  <p>
+    <a href="README.md">English</a> ·
+    <a href="README.es.md">Español</a> ·
+    <strong>Português</strong> ·
+    <a href="README.fr.md">Français</a> ·
+    <a href="README.zh-CN.md">简体中文</a> ·
+    <a href="README.ja.md">日本語</a> ·
+    <a href="README.ko.md">한국어</a> ·
+    <a href="README.de.md">Deutsch</a> ·
+    <a href="README.ru.md">Русский</a>
+  </p>
+</div>
 
-<img src="docs/brand/mark.png" width="96" align="right" alt="Dois clips. Uma emenda.">
-
-# graft
-
-[![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
-[![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+---
 
 O score é a fonte. A essence é imutável. O mp4 é uma compilação.
 Você enxerta um hook novo. O body permanece.
@@ -13,8 +23,6 @@ Você enxerta um hook novo. O body permanece.
 git versiona o **score** (JSON). CAS versiona a essence. O action cache
 versiona os encodes, então mudar um hook copia o body por bitstream.
 graft não é um NLE. O runtime é **ffmpeg** e **ffprobe** no `PATH`.
-
-[Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [ferramentas próximas](docs/comparison.md)
 
 ![graft CLI compilando, vinculando outro hook e mantendo body e cta limpos](docs/assets/landing.gif)
 

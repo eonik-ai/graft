@@ -1,57 +1,91 @@
-English · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
+<div align="center">
+  <a href="https://github.com/eonik-ai/graft">
+    <img src="docs/brand/mark.png" alt="Two clips. One join." width="120" />
+  </a>
+  <h1>graft</h1>
+  <p><strong>Change the hook. Keep the body.</strong></p>
+  <p>An incremental compiler for video composition. JSON score, immutable essence, action-cache builds.</p>
+  <p>
+    <a href="#get-started">Get started</a> ·
+    <a href="docs/mission.md">Mission</a> ·
+    <a href="schema/">Schema</a> ·
+    <a href="docs/roadmap.md">Roadmap</a>
+  </p>
+  <p>
+    <a href="https://github.com/eonik-ai/graft/actions/workflows/ci.yml"><img src="https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-18181B?style=flat-square" alt="Apache-2.0 license" /></a>
+    <img src="https://img.shields.io/badge/Rust-1.85%2B-B7410E?style=flat-square" alt="Rust 1.85+" />
+    <img src="https://img.shields.io/badge/runtime-ffmpeg-007808?style=flat-square" alt="ffmpeg runtime" />
+  </p>
+  <p>
+    <strong>English</strong> ·
+    <a href="README.es.md">Español</a> ·
+    <a href="README.pt-BR.md">Português</a> ·
+    <a href="README.fr.md">Français</a> ·
+    <a href="README.zh-CN.md">简体中文</a> ·
+    <a href="README.ja.md">日本語</a> ·
+    <a href="README.ko.md">한국어</a> ·
+    <a href="README.de.md">Deutsch</a> ·
+    <a href="README.ru.md">Русский</a>
+  </p>
+</div>
 
-<img src="docs/brand/mark.png" width="96" align="right" alt="Two clips. One join.">
+---
 
-# graft
-
-[![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
-[![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-
-`graft` is an incremental compiler for video composition. A JSON score names
-the slots; a content-addressed store holds the essence; an action cache keeps
-every clean encode.
+The score is source. Essence is immutable. The mp4 is a compile.
 
 Change a hook and compile again. `graft` encodes the hook, recuts its join,
-bitstream-copies the body, and links a new mp4. The score is source. Essence
-is immutable. The mp4 is a compile.
-
-[Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [nearby tools](docs/comparison.md)
+bitstream-copies the body, and links a new mp4. git versions the JSON score;
+CAS stores the source material; the action cache keeps every clean encode.
 
 ![graft CLI compiling, rebinding a hook, and keeping body and cta clean](docs/assets/landing.gif)
 
 _A real local session, recorded with [asciinema](https://github.com/asciinema/asciinema).
 The replay source is [`landing.cast`](docs/assets/landing.cast)._
 
-## Get started
+## What graft can do
 
-### Requirements
+- Compile named `hook`, `body`, `proof`, and `cta` slots into an mp4 dest
+- Reuse clean slot encodes from a content-addressed action cache
+- Re-encode a changed hook while bitstream-copying the unchanged body
+- Map a platform signal such as `hook_rate` on `[0, 3)` back to the dirty slot
+- Run Long-GOP x264 through system ffmpeg, or frame-grain `graft-intra` in-tree
+- Print the action graph and cache decision as JSON before or after an encode
 
-graft shells out to ffmpeg; it does not link GPL x264. Rust 1.85+ (`rustup`).
-`$FFMPEG` / `$FFPROBE` override the binaries on `PATH`.
+## What it cannot do
 
-### Install
+graft does not yet apply speed/retime, composite layer overlays, compile audio,
+export to an NLE, render a live preview, or use S3. It is not git-on-pixels, a
+lossless round-trip to every NLE, a lock server, a DAM, or a review tool.
+Adapters are guests and their loss is documented.
+
+The compiler, action graph, filesystem CAS, frame-grain backend, and system
+ffmpeg/x264 path are in-tree. Schema format id `0.1.0` is not a crate version.
+The first compiler GitHub tag is `v0.2.0`; do not reuse the spec tag `v0.1.0`.
+Breaking schema changes need an RFC.
+
+## Install
+
+Runtime: **ffmpeg** and **ffprobe** on `PATH` (or `$FFMPEG` / `$FFPROBE`).
+graft shells out; it does not link GPL x264. Rust 1.85+ (`rustup`).
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
 graft --help
 ```
 
-GitHub Release binaries (when a `v0.2.*` tag is cut): macOS arm64 and Linux
-x64. crates.io is not published yet (`publish = false`).
+GitHub Release binaries arrive when a `v0.2.*` tag is cut: macOS arm64 and
+Linux x64. crates.io is not published yet (`publish = false`).
 
-To build from a clone:
+From a clone:
 
 ```sh
 git clone https://github.com/eonik-ai/graft.git
 cd graft
 make test
-cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 ```
 
-The worked example is JSON only (placeholder hashes, no media in git), so its
-compile prints a **plan**. Your own clips compile to mp4.
-
-### Run your first compile
+Your first compile:
 
 ```sh
 mkdir ad && cd ad
@@ -76,15 +110,7 @@ graft compile --out ad-v2.mp4
 `graft dirty` names `hook` and its hook→body kerf. `body` and `cta` are clean;
 their encoded bytes are reused.
 
-## How it works
-
-- **Recipe:** git versions the JSON score and scions.
-- **Essence:** CAS stores immutable source material by BLAKE3 hash.
-- **Build:** the action cache stores slot encodes and kerfs; concat links the dest.
-
-9:16 is a **dest**, not a slot. For Long-GOP x264, graft makes closed-GOP
-slot files and joins them with ffmpeg `concat -c copy`. A platform signal can
-address a time range:
+Address a platform metric through the time map:
 
 ```sh
 graft signal --kind hook_rate --t 0-3
@@ -92,32 +118,24 @@ graft signal --kind hook_rate --t 0-3
 
 That dirties `hook` plus the hook→body kerf, not `body`.
 
-## Project status
+The worked example is JSON only (placeholder hashes, no media in git), so its
+compile prints a **plan**. Your own clips compile to mp4.
 
-The compiler, action graph, filesystem CAS, frame-grain backend, and system
-ffmpeg/x264 path are in-tree. Speed/retime, layer overlays, audio, NLE export,
-preview, and S3 are not in this release.
+## Security
 
-Schema format id `0.1.0` is not a crate version. The first compiler GitHub tag
-is `v0.2.0`; do not reuse the spec tag `v0.1.0`. Breaking schema changes need
-an RFC.
+Local material bytes and build outputs live under `.graft/`, which is ignored.
+Do not commit essence (`.mov`, `.mp4`, `.mxf`) or credentials. Report
+vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
-graft is not git-on-pixels, a lossless round-trip to every NLE, a lock server,
-a DAM, or a review tool. Its [comparison with git, OTIO, IMF, and ffmpeg
-concat](docs/comparison.md) is explicit about those boundaries.
+## Also
 
-## Next steps
-
-- Start with the [mission](docs/mission.md) and [non-negotiable principles](docs/principles.md).
-- Read the [compiler architecture](docs/architecture.md) and [cache/kerf model](docs/compile.md).
-- Browse the normative [JSON Schema](schema/) and the [worked example](examples/hook-v3-body-v1-9x16/).
-- See the [roadmap](docs/roadmap.md), [adapter loss matrix](docs/adapters.md), or [README translations](docs/TRANSLATING.md).
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md). Schema changes need an RFC.
-All commits require a Developer Certificate of Origin (`Signed-off-by`).
-Be kind: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+| | |
+|---|---|
+| Why graft exists | [Mission](docs/mission.md) · [principles](docs/principles.md) |
+| Compiler contract | [Architecture](docs/architecture.md) · [cache and kerfs](docs/compile.md) · [time map](docs/time-map.md) |
+| Machine contract | [JSON Schema](schema/) · [worked example](examples/hook-v3-body-v1-9x16/) |
+| Boundaries | [git, OTIO, IMF, ffmpeg concat](docs/comparison.md) · [adapter loss matrix](docs/adapters.md) |
+| Project | [Roadmap](docs/roadmap.md) · [contributing](CONTRIBUTING.md) · [translations](docs/TRANSLATING.md) |
 
 ## License
 
