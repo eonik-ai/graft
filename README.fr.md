@@ -1,10 +1,8 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · Français · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="Deux clips. Une jointure.">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="Deux clips. Une jointure.">
-
-Un compilateur pour la composition vidéo.
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -18,10 +16,19 @@ graft n’est pas un NLE. Le runtime, c’est **ffmpeg** et **ffprobe** sur `PAT
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [outils voisins](docs/comparison.md)
 
-## Installation
+![graft CLI compile, relie un autre hook et garde body et cta propres](docs/assets/landing.gif)
+
+_Une vraie session locale, enregistrée avec [asciinema](https://github.com/asciinema/asciinema).
+La source de lecture est [`landing.cast`](docs/assets/landing.cast)._
+
+## Bien démarrer
+
+### Prérequis
 
 graft appelle le ffmpeg du système ; il ne lie pas x264 GPL. Rust 1.85+ (`rustup`).
 `$FFMPEG` / `$FFPROBE` remplacent les binaires de `PATH`.
+
+### Installation
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -43,7 +50,7 @@ cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 L’exemple travaillé n’est que du JSON (hachages factices, pas de média dans git).
 `graft compile` y imprime un **plan**. Vos clips, eux, compilent en mp4.
 
-## Compiler trois clips (9x16)
+### Lancer la première compilation
 
 ```sh
 mkdir ad && cd ad
@@ -70,7 +77,7 @@ affiche `{hook}` plus le kerf hook→body, pas `body`.
 Non pris en charge aujourd’hui : speed/retime, superposition de calques, audio,
 export NLE. `params.speed` ne change que l’action key.
 
-## État
+## État du projet
 
 | Pièce | État |
 | --- | --- |
@@ -109,7 +116,7 @@ graft signal --kind hook_rate --t 0-3
 `export` n’est pas implémenté. `--encoder graft-intra` est le backend à grain
 image (tests / image-seq), pas un dest QuickTime.
 
-## Documentation
+## Étapes suivantes
 
 La documentation pour les implémenteurs est en anglais. [Traductions de ce README](docs/TRANSLATING.md).
 

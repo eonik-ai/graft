@@ -23,12 +23,14 @@ crates.io is not published (`publish = false`).
 - Frame-grain backend `graft-intra` (algebra; dest is GFI1).
 - JSON CLI. Encoder `profile` is optional on the scion schema.
 - `CITATION.cff` (CFF 1.2). `docs/TRANSLATING.md` for README locales.
+- Reproducible asciinema CLI demo: compile, bind a new hook, then show
+  `body` and `cta` clean in the action-cache dirty set.
 
 ### Changed
 
-- README is a compiler landing page: text H1 `# graft`, mark after the
-  heading (drawing alt, not a wordmark), language bar, first-party
-  siblings (`README.zh-CN.md` and seven more).
+- README is a tool-first compiler landing page: text H1 `# graft`, mark as
+  a mark, real CLI movie, first compile, how it works, project status, next
+  steps, language bar, and eight first-party siblings.
 - README matches the product: mp4 via ffmpeg; example JSON is plan-only.
 - MSRV 1.85; CI remains 1.98.1.
 

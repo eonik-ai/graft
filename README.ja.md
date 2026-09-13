@@ -1,10 +1,8 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · 日本語 · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="クリップが二つ。接合は一箇所。">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="クリップが二つ。接合は一箇所。">
-
-映像コンポジションのコンパイラ。
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -16,10 +14,19 @@ git が **score**（JSON）を版管理する。CAS が essence を版管理す�
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [近傍のツール](docs/comparison.md)
 
-## インストール
+![graft CLI がコンパイルし、hook を再バインドし、body と cta をクリーンに保つ様子](docs/assets/landing.gif)
+
+_[asciinema](https://github.com/asciinema/asciinema) で記録した実際のローカルセッション。
+再生ソースは [`landing.cast`](docs/assets/landing.cast)。_
+
+## はじめる
+
+### 要件
 
 graft はシステムの ffmpeg を呼び出す。GPL の x264 はリンクしない。Rust 1.85+（`rustup`）。
 `$FFMPEG` / `$FFPROBE` で `PATH` 上のバイナリを上書きできる。
+
+### インストール
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -41,7 +48,7 @@ cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 作業例は JSON のみ（プレースホルダのハッシュ。git にメディアは無い）。
 そこで `graft compile` すると **plan** が出る。自分のクリップは mp4 にコンパイルされる。
 
-## クリップ三つをコンパイルする（9x16）
+### 最初のコンパイルを実行する
 
 ```sh
 mkdir ad && cd ad
@@ -67,7 +74,7 @@ graft signal --kind hook_rate --t 0-3
 未対応：speed/retime、レイヤ重ね、音声、NLE エクスポート。
 `params.speed` は action key だけを変える。
 
-## 現状
+## プロジェクトの現状
 
 | 要素 | 状態 |
 | --- | --- |
@@ -103,7 +110,7 @@ graft signal --kind hook_rate --t 0-3
 
 `export` は未実装。`--encoder graft-intra` はフレーム粒度バックエンド（テスト / image-seq）であり、QuickTime dest ではない。
 
-## ドキュメント
+## 次のステップ
 
 実装者向けドキュメントは英語。[この README の翻訳ルール](docs/TRANSLATING.md)。
 

@@ -1,10 +1,8 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · Русский
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="Два клипа. Одно соединение.">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="Два клипа. Одно соединение.">
-
-Компилятор композиции видео.
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -18,10 +16,19 @@ graft — не NLE. Среда выполнения — **ffmpeg** и **ffprobe*
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [соседние инструменты](docs/comparison.md)
 
-## Установка
+![graft CLI компилирует, привязывает другой hook и сохраняет body и cta чистыми](docs/assets/landing.gif)
+
+_Настоящий локальный сеанс, записанный с [asciinema](https://github.com/asciinema/asciinema).
+Исходник воспроизведения — [`landing.cast`](docs/assets/landing.cast)._
+
+## Начало работы
+
+### Требования
 
 graft вызывает системный ffmpeg; GPL x264 не линкуется. Rust 1.85+ (`rustup`).
 `$FFMPEG` / `$FFPROBE` подменяют двоичные файлы из `PATH`.
+
+### Установка
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -43,7 +50,7 @@ cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 Рабочий пример — только JSON (заглушки хешей, в git нет медиа).
 `graft compile` там печатает **plan**. Ваши клипы компилируются в mp4.
 
-## Скомпилировать три клипа (9x16)
+### Запустить первую компиляцию
 
 ```sh
 mkdir ad && cd ad
@@ -70,7 +77,7 @@ graft signal --kind hook_rate --t 0-3
 Сейчас не поддерживается: speed/retime, наложение слоёв, звук, экспорт в NLE.
 `params.speed` меняет только action key.
 
-## Состояние
+## Состояние проекта
 
 | Часть | Состояние |
 | --- | --- |
@@ -109,7 +116,7 @@ graft signal --kind hook_rate --t 0-3
 `export` не реализован. `--encoder graft-intra` — бэкенд покадрового зерна
 (тесты / image-seq), не dest QuickTime.
 
-## Документация
+## Следующие шаги
 
 Документация для реализаторов на английском. [Переводы этого README](docs/TRANSLATING.md).
 

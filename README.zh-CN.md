@@ -1,10 +1,8 @@
 [English](README.md) · 简体中文 · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="两段素材，一处接合。">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="两段素材，一处接合。">
-
-视频合成编译器。
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -16,10 +14,19 @@ git 版本化 **score**（JSON）。CAS 版本化 essence。action cache 版本�
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [邻近工具](docs/comparison.md)
 
-## 安装
+![graft CLI 编译、重新绑定 hook，并保持 body 与 cta 干净](docs/assets/landing.gif)
+
+_真实的本地会话，由 [asciinema](https://github.com/asciinema/asciinema) 录制。
+回放源文件是 [`landing.cast`](docs/assets/landing.cast)。_
+
+## 开始使用
+
+### 要求
 
 graft 调用系统里的 ffmpeg，不链接 GPL 的 x264。需要 Rust 1.85+（`rustup`）。
 `$FFMPEG` / `$FFPROBE` 可覆盖 `PATH` 上的二进制。
+
+### 安装
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -41,7 +48,7 @@ cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 仓库里的工作示例只有 JSON（占位哈希，git 中没有媒体）。
 在那里运行 `graft compile` 只会打印一份 **plan**。你自己的素材才会编译成 mp4。
 
-## 编译三段素材（9x16）
+### 运行第一次编译
 
 ```sh
 mkdir ad && cd ad
@@ -67,7 +74,7 @@ graft signal --kind hook_rate --t 0-3
 目前不支持：speed/retime、图层叠加、音频、NLE 导出。
 `params.speed` 只改变 action key。
 
-## 状态
+## 项目状态
 
 | 部分 | 状态 |
 | --- | --- |
@@ -103,7 +110,7 @@ graft signal --kind hook_rate --t 0-3
 
 `export` 尚未实现。`--encoder graft-intra` 是帧粒度后端（测试 / image-seq），不是 QuickTime dest。
 
-## 文档
+## 下一步
 
 实现者文档为英文。[本 README 的翻译约定](docs/TRANSLATING.md)。
 

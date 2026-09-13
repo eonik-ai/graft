@@ -1,27 +1,35 @@
 English · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="Two clips. One join.">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="Two clips. One join.">
-
-A compiler for video composition.
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-The score is source. Essence is immutable. The mp4 is a compile.
-You graft a new hook. The body stays.
+`graft` is an incremental compiler for video composition. A JSON score names
+the slots; a content-addressed store holds the essence; an action cache keeps
+every clean encode.
 
-git versions the **score** (JSON). CAS versions essence. The action cache
-versions encodes, so changing a hook bitstream-copies the body. graft is
-not an NLE. Runtime is **ffmpeg** and **ffprobe** on `PATH`.
+Change a hook and compile again. `graft` encodes the hook, recuts its join,
+bitstream-copies the body, and links a new mp4. The score is source. Essence
+is immutable. The mp4 is a compile.
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [nearby tools](docs/comparison.md)
 
-## Install
+![graft CLI compiling, rebinding a hook, and keeping body and cta clean](docs/assets/landing.gif)
+
+_A real local session, recorded with [asciinema](https://github.com/asciinema/asciinema).
+The replay source is [`landing.cast`](docs/assets/landing.cast)._
+
+## Get started
+
+### Requirements
 
 graft shells out to ffmpeg; it does not link GPL x264. Rust 1.85+ (`rustup`).
 `$FFMPEG` / `$FFPROBE` override the binaries on `PATH`.
+
+### Install
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -31,7 +39,7 @@ graft --help
 GitHub Release binaries (when a `v0.2.*` tag is cut): macOS arm64 and Linux
 x64. crates.io is not published yet (`publish = false`).
 
-From a clone:
+To build from a clone:
 
 ```sh
 git clone https://github.com/eonik-ai/graft.git
@@ -40,10 +48,10 @@ make test
 cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 ```
 
-The worked example is JSON only (placeholder hashes, no media in git).
-`graft compile` there prints a **plan**. Your clips compile to mp4.
+The worked example is JSON only (placeholder hashes, no media in git), so its
+compile prints a **plan**. Your own clips compile to mp4.
 
-## Compile three clips (9x16)
+### Run your first compile
 
 ```sh
 mkdir ad && cd ad
@@ -57,78 +65,53 @@ graft bind cta ./cta.mov
 graft compile --out ad.mp4
 ```
 
-Play `ad.mp4`. Rebind the hook and compile again: `graft dirty` shows
-`body` **hit**. The body encode is bitstream-copied. Dest is a linker
-product, never essence.
+Play `ad.mp4`. Now bind a different hook:
+
+```sh
+graft bind hook ./hook-v2.mov
+graft dirty
+graft compile --out ad-v2.mp4
+```
+
+`graft dirty` names `hook` and its hook→body kerf. `body` and `cta` are clean;
+their encoded bytes are reused.
+
+## How it works
+
+- **Recipe:** git versions the JSON score and scions.
+- **Essence:** CAS stores immutable source material by BLAKE3 hash.
+- **Build:** the action cache stores slot encodes and kerfs; concat links the dest.
+
+9:16 is a **dest**, not a slot. For Long-GOP x264, graft makes closed-GOP
+slot files and joins them with ffmpeg `concat -c copy`. A platform signal can
+address a time range:
 
 ```sh
 graft signal --kind hook_rate --t 0-3
 ```
 
-prints `{hook}` plus the hook→body kerf, not `body`.
+That dirties `hook` plus the hook→body kerf, not `body`.
 
-Unsupported today: speed/retime, layer overlays, audio, NLE export.
-`params.speed` changes the action key only.
+## Project status
 
-## Status
+The compiler, action graph, filesystem CAS, frame-grain backend, and system
+ffmpeg/x264 path are in-tree. Speed/retime, layer overlays, audio, NLE export,
+preview, and S3 are not in this release.
 
-| Piece | State |
-| --- | --- |
-| Mission, principles, ADRs | encoded |
-| Score / scion / time-map schema | format id `0.1.0` |
-| Signal → dirty-set (`hook_rate` does not dirty body) | `ref/` + Rust |
-| Action graph + action cache | `graft-compile` / `graft-cas` |
-| Frame-grain (`graft-intra`) | in-tree; dest is `GFI1`, not a player file |
-| Long-GOP x264 mp4 | system ffmpeg; closed-GOP slot files; concat `-c copy` |
-| NLE adapters / preview / S3 | not in this release |
+Schema format id `0.1.0` is not a crate version. The first compiler GitHub tag
+is `v0.2.0`; do not reuse the spec tag `v0.1.0`. Breaking schema changes need
+an RFC.
 
-Schema format id `0.1.0` is not a crate version. First compiler GitHub
-tag is `v0.2.0` (do not reuse spec tag `v0.1.0`). Breaking schema changes
-are an RFC.
+graft is not git-on-pixels, a lossless round-trip to every NLE, a lock server,
+a DAM, or a review tool. Its [comparison with git, OTIO, IMF, and ffmpeg
+concat](docs/comparison.md) is explicit about those boundaries.
 
-## What graft is not
+## Next steps
 
-- Not git-on-pixels. Do not xdelta a delivery mp4.
-- Not a lossless round-trip to every NLE. Adapters are guests; loss is documented.
-- Not a lock server, a DAM, or a review tool.
-
-Cousins (git, OTIO, IMF, ffmpeg concat) are in [docs/comparison.md](docs/comparison.md).
-
-## Command surface
-
-```text
-graft init
-graft slot hook --window 0-3
-graft bind hook ./hooks/v3.mov
-graft scion 9x16 --dest 1080x1920 --encoder x264
-graft compile --out ad.mp4
-graft dirty
-graft signal --kind hook_rate --t 0-3
-```
-
-`export` is not implemented. `--encoder graft-intra` is the frame-grain
-backend (tests / image-seq), not a QuickTime dest.
-
-## Documentation
-
-Implementer docs are English. [Translations of this README](docs/TRANSLATING.md).
-
-| Doc | What it settles |
-| --- | --- |
-| [docs/mission.md](docs/mission.md) | Why graft exists |
-| [docs/principles.md](docs/principles.md) | Non-negotiables and non-goals |
-| [docs/glossary.md](docs/glossary.md) | score, slot, scion, kerf, dest |
-| [docs/architecture.md](docs/architecture.md) | Layers, crate graph, compile pipeline |
-| [docs/schema.md](docs/schema.md) | Commentary on the normative JSON Schema |
-| [docs/compile.md](docs/compile.md) | Cache keys, grain, smart concat |
-| [docs/time-map.md](docs/time-map.md) | How a metric addresses a slot |
-| [docs/adapters.md](docs/adapters.md) | Loss matrix |
-| [docs/comparison.md](docs/comparison.md) | git, OTIO, IMF, Vit, Aspect |
-| [docs/roadmap.md](docs/roadmap.md) | Work still ahead |
-| [docs/brand/](docs/brand/) | Mark: two clips, one join |
-| [docs/adr/](docs/adr/) | Decisions already made |
-
-Normative machine contract: [`schema/`](schema/).
+- Start with the [mission](docs/mission.md) and [non-negotiable principles](docs/principles.md).
+- Read the [compiler architecture](docs/architecture.md) and [cache/kerf model](docs/compile.md).
+- Browse the normative [JSON Schema](schema/) and the [worked example](examples/hook-v3-body-v1-9x16/).
+- See the [roadmap](docs/roadmap.md), [adapter loss matrix](docs/adapters.md), or [README translations](docs/TRANSLATING.md).
 
 ## Contributing
 

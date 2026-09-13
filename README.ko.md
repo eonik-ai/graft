@@ -1,10 +1,8 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · 한국어 · [Español](README.es.md) · [Português (Brasil)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md)
 
+<img src="docs/brand/mark.png" width="96" align="right" alt="클립 둘, 이음 하나.">
+
 # graft
-
-<img src="docs/brand/mark.png" width="120" alt="클립 둘, 이음 하나.">
-
-영상 합성 컴파일러.
 
 [![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
 [![Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -16,10 +14,19 @@ git이 **score**(JSON)를 버전한다. CAS가 essence를 버전한다. action c
 
 [Apache-2.0](LICENSE) · [mission](docs/mission.md) · [principles](docs/principles.md) · [schema](schema/) · [가까운 도구](docs/comparison.md)
 
-## 설치
+![graft CLI가 컴파일하고 hook을 다시 바인드한 뒤 body와 cta를 깨끗하게 유지하는 모습](docs/assets/landing.gif)
+
+_[asciinema](https://github.com/asciinema/asciinema)로 녹화한 실제 로컬 세션.
+재생 소스는 [`landing.cast`](docs/assets/landing.cast)입니다._
+
+## 시작하기
+
+### 요구 사항
 
 graft는 시스템 ffmpeg를 호출한다. GPL x264를 링크하지 않는다. Rust 1.85+(`rustup`).
 `$FFMPEG` / `$FFPROBE`로 `PATH`의 바이너리를 덮어쓴다.
+
+### 설치
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
@@ -41,7 +48,7 @@ cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 작업 예제는 JSON뿐이다(플레이스홀더 해시, git에 미디어 없음).
 거기에서 `graft compile`은 **plan**만 출력한다. 당신의 클립이 mp4로 컴파일된다.
 
-## 클립 세 개를 컴파일하기 (9x16)
+### 첫 컴파일 실행하기
 
 ```sh
 mkdir ad && cd ad
@@ -67,7 +74,7 @@ graft signal --kind hook_rate --t 0-3
 아직 없음: speed/retime, 레이어 오버레이, 오디오, NLE 내보내기.
 `params.speed`는 action key만 바꾼다.
 
-## 상태
+## 프로젝트 상태
 
 | 조각 | 상태 |
 | --- | --- |
@@ -103,7 +110,7 @@ graft signal --kind hook_rate --t 0-3
 
 `export`는 구현되지 않았다. `--encoder graft-intra`는 프레임 입자 백엔드(테스트 / image-seq)이지 QuickTime dest가 아니다.
 
-## 문서
+## 다음 단계
 
 구현자 문서는 영어다. [이 README의 번역 규칙](docs/TRANSLATING.md).
 
