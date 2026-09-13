@@ -4,7 +4,8 @@
 This page is commentary. If they disagree, the schema wins; then file a PR
 to fix this page.
 
-Version: **0.1.0**. The `graft` field on every document must match.
+Format id: **0.1.0**. The `graft` field on every document must match.
+This is not a product version.
 
 ## Documents
 
@@ -41,15 +42,18 @@ the window at 3s, the compiler warns: pad, or accept body spill.
 }
 ```
 
-`in_s`/`out_s` are on the **material** timeline. Speed, crop, grade refs
-are `params` and part of `slot_encode`.
+`in_s`/`out_s` are on the **material** timeline. `params.speed` is part of
+the `slot_encode` action key. **Retime is not applied yet** — speed ≠ 1
+invalidates the cache key but does not resample frames.
+
+`encoder.profile` is optional (x264 fingerprints still send `"high"`;
+`graft-intra` uses `"intra"`).
 
 ## Layers
 
-`base | copy | grade | legal`. Later names override the same slot with
-higher strength. This is not a pixel blend. Copy layer changing a CTA
-line does not re-encode body unless the dest text renderer is in-body
-(it should not be: captions are their own slot).
+`base | copy | grade | legal` is the strength order. Schema 0.1.0 has a
+**single** binding map on the scion. Flatten is identity until overlay
+bindings exist. This is not a pixel blend.
 
 ## Worked scion
 

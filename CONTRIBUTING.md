@@ -27,7 +27,9 @@ not guests.
 
 - `git`
 - Python 3.10+
+- Rust 1.85+ (`rustc`, `cargo`; CI uses 1.98.1 from `rust-toolchain.toml`)
 - `make`
+- `ffmpeg` / `ffprobe` on `PATH` for Long-GOP compile tests (CI installs them)
 
 ## Workflow
 
@@ -70,8 +72,17 @@ project lead decides (see [GOVERNANCE.md](GOVERNANCE.md)).
 | signal → dirty rule in `ref/` | `docs/time-map.md`, the worked example `dirty.json` |
 | cache-key formula | `docs/compile.md` |
 | a principle or non-goal | `AGENTS.md` (agents read it) |
-| intended CLI | `README.md` command surface |
+| intended CLI | `README.md` command surface, and every `README.<locale>.md` (or mark locales stale) |
+| English README prose | sibling READMEs in the same PR, or name the stale locales; [docs/TRANSLATING.md](docs/TRANSLATING.md) |
 | an ADR | never rewrite history; add a new ADR that supersedes |
+
+## README translations
+
+English [`README.md`](README.md) is canonical. First-party siblings live next
+to it (`README.zh-CN.md`, `README.ja.md`, …). Schema, ADRs, and the rest of
+`docs/` stay English. Rules, filename convention, and the do-not-translate
+list: [docs/TRANSLATING.md](docs/TRANSLATING.md). A three-sentence stub is
+not a translation.
 
 ## Commit messages
 
@@ -80,19 +91,26 @@ project lead decides (see [GOVERNANCE.md](GOVERNANCE.md)).
 ```
 
 Types: `feat` `fix` `docs` `test` `refactor` `chore` `ci` `build`.
-Scopes: `schema` `ref` `docs` `examples` `adr` `meta`.
+Scopes: `schema` `ref` `docs` `examples` `adr` `meta` `cli` `score` `cas` `compile`.
 
 Breaking schema changes: `feat(schema)!: drop span tuples for {start,end}` plus a
-`BREAKING CHANGE:` footer. Pre-1.0 this is still a minor version bump, but the
-changelog must say it broke.
+`BREAKING CHANGE:` footer. Bump the `graft` format id on documents in that PR.
+Do not cut a GitHub release for it until the project is actually shipping.
 
-## Code (when it exists)
+## Code
+
+Read [docs/architecture.md](docs/architecture.md) before adding a crate,
+module, or encoder. The crate graph is
+
+`graft` → `graft-compile` → `graft-cas` → `graft-score`.
 
 Implementation language for the compiler and CLI is **Rust**. Do not add a
 second core language. Adapters may be in anything; they live behind a loss
-matrix and must not leak into `ref/` or `schema/`.
+matrix and must not leak into `ref/` or `schema/`. They depend on
+`graft-score` only.
 
 Do not commit essence (`.mov` `.mp4` `.mxf`). Hashes and JSON only.
+Do not scaffold a fake encoder. Scopes: `cli` `score` `cas` `compile`.
 
 ## Review
 

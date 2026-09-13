@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+name: release
+
+# Cut a compiler release: git tag v0.2.0 (not v0.1.0 — that is the spec snapshot).
+on:
+  push:
+    tags:
+      - "v0.2.*"
+      - "v0.[3-9].*"
+      - "v[1-9].*"
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: graft-x86_64-unknown-linux-gnu
+          - os: macos-latest
+            artifact: graft-aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+      - name: build
+        run: cargo build --release --locked --bin graft
+      - name: pack
+        run: |
+          mkdir -p dist
+          bin="target/release/graft"
+          if [ -f target/release/graft.exe ]; then bin=target/release/graft.exe; fi
+          cp "$bin" "dist/${{ matrix.artifact }}"
+          chmod +x "dist/${{ matrix.artifact }}" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  github-release:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Compiler release. Needs ffmpeg on PATH. Schema format id is still 0.1.0. crates.io is not published."

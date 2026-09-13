@@ -5,35 +5,34 @@ Two clips. One join.
 Left frame is the new take. Right frame is the body that stays. The
 chevron is the graft — the only place the compiler rewrites.
 
+The drawing is [mark.png](mark.png). There is no lockup.
+
 ## Files
 
 | File | Size | Use |
 | --- | --- | --- |
-| [mark.png](mark.png) | 1024×1024, alpha | Icon |
-| [wordmark.png](wordmark.png) | alpha | `graft` from the lockup. White. Dark fields only. |
-| [lockup.png](lockup.png) | mark + word, black | README, docs |
-| [social.png](social.png) | 1280×640 | Open Graph |
-
-There is no second logo, no SVG recreation, no padded duplicate of the
-lockup. The PNG lockup is the drawing. The icon is that drawing without
-the word, on a transparent 1024².
+| [mark.png](mark.png) | 1024×1024, alpha | The logo. README, icon, docs. |
+| [wordmark.png](wordmark.png) | alpha | `graft` in white. Dark fields only. |
+| [social.png](social.png) | 1280×640 | Open Graph (black field) |
 
 ## Colour
 
 | Role | Approx. | Meaning |
 | --- | --- | --- |
-| Field | `#000000` | Lockup and social only |
+| Field | transparent | `mark.png` |
 | Frames | `#3D4458` | Slots |
 | Join | `#9BB0FF` → `#3ED89A` | The kerf |
 | Word | `#FFFFFF` | lowercase `graft` |
+| Social field | `#000000` | Open Graph only |
 
 ## Do not
 
 - Recolour the chevron flat.
 - Drop the sprockets.
 - Put the new take on the right.
-- Sit the white wordmark on a light page. Use the lockup.
-- Draw a second `graft` under the lockup.
+- Sit the white wordmark on a light page.
+- Draw a second `graft` under the mark.
+- Mint a lockup or a dark/light duplicate of the mark.
 
 ## Trademark
 

@@ -2,16 +2,40 @@
 
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Versioning: [SemVer](https://semver.org/) on the **schema**. The compiler
-is unreleased.
+
+The `graft` field on JSON is a format id (`0.1.0`), not a crate version.
+First compiler GitHub tag is `v0.2.0`. Do not reuse spec tag `v0.1.0`.
+crates.io is not published (`publish = false`).
 
 ## [Unreleased]
 
 ### Added
 
-- Project mark: two clips, one join (`docs/brand/`).
+- Install: `cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft`.
+  GitHub Release workflow for `v0.2.*` binaries (macOS arm64, Linux x64).
+- `graft scion --encoder x264|graft-intra`, `graft compile --out`, bind probe
+  (ffprobe / GFI1).
+- Long-GOP: system ffmpeg/x264. Closed-GOP slot encodes; concat `-c copy`.
+  Hook swap keeps the body blob. Needs ffmpeg on `PATH`.
+- ADR 0006: action graph is the compile IR; action cache is the dirty
+  oracle. `ActionKey` is not `BlobId`.
+- Namespaced CAS plus action cache under `.graft/`.
+- Frame-grain backend `graft-intra` (algebra; dest is GFI1).
+- JSON CLI. Encoder `profile` is optional on the scion schema.
+- `CITATION.cff` (CFF 1.2). `docs/TRANSLATING.md` for README locales.
+
+### Changed
+
+- README is a compiler landing page: text H1 `# graft`, mark after the
+  heading (drawing alt, not a wordmark), language bar, first-party
+  siblings (`README.zh-CN.md` and seven more).
+- README matches the product: mp4 via ffmpeg; example JSON is plan-only.
+- MSRV 1.85; CI remains 1.98.1.
 
 ## [0.1.0] - 2026-09-13
+
+North-star snapshot (format id `0.1.0` on documents). Not a compiler
+release.
 
 ### Added
 

@@ -1,44 +1,48 @@
 # Roadmap
 
-Pre-1.0 the **schema** is the version. The CLI is unreleased until 0.2
-does something a human can run besides `make test`.
+There is **no product version** until a compiler GitHub tag `v0.2.0`.
+Do not reuse spec tag `v0.1.0`. The `graft` field on JSON is a **format
+id** (`0.1.0` today), not a crate version.
 
-## 0.1 — north star (this tag)
+## North star
 
 - Mission, principles, ADRs
 - JSON Schema for score, scion, time map
 - Worked example and signal → dirty-set reference
 
-## 0.2 — score CLI, no pixels
+## Score CLI
 
-`graft init | slot | bind | scion | dirty | signal` on JSON only.
-Print the dirty set for the worked example. Still no ffmpeg.
+`graft init | slot | bind | scion | dirty | signal` on JSON.
+`graft compile` schedules from the action cache. With essence in CAS:
+`graft-intra` copies frames; `x264` shells out to ffmpeg and writes mp4.
 
-## 0.3 — CAS
+## CAS
 
-blake3 put/get. Relink by hash. Refuse path-only bindings.
+Namespaced blake3 blobs + action cache. Relink by hash. Refuse path-only
+bindings. `ActionKey` ≠ `BlobId`.
 
-## 0.4 — intra compile
+## Intra compile
 
-ProRes / image-seq / All-I: sample-accurate concat. Prove hook swap
-does not rewrite body bytes.
+ProRes / image-seq / All-I / `graft-intra`: sample-accurate concat.
+Hook swap does not rewrite body bytes (proven on frame grain).
 
-## 0.5 — Long-GOP kerf
+## Long-GOP kerf
 
-x264 (or ffmpeg libx264) with fixed `keyint`, `sc_threshold=0`.
-Re-encode dirty GOPs + kerf. Bitstream-copy hits.
+x264 via **system ffmpeg** (`keyint` fixed, `sc_threshold=0`). Closed-GOP
+slot files; concat bitstream-copies hits. Hook swap keeps the body blob.
+Mid-GOP splice on a shared timeline encode is the same kerf node, later.
 
-## 0.6 — OTIO export
+## OTIO export
 
 Lossy, documented. Slots as markers. Round-trip test: cuts + media refs,
 not effects.
 
-## 0.7 — signal ingest
+## Signal ingest
 
 CSV/JSON of `(kind, t0, t1, dest)` → dirty set via time map.
 Keep the north-star test.
 
-## 1.0 — schema freeze
+## Schema freeze (first real release)
 
 No breaking change without a major version. Encoder fingerprint and
 cache keys stable. Device-first compile for intra + Long-GOP cuts

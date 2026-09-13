@@ -4,8 +4,9 @@
 
 | Version | Supported |
 | --- | --- |
-| spec `0.1.x` (this tree) | yes |
-| unreleased compiler | not shipped; report design issues as RFCs |
+| spec `0.1.x` (JSON format id) | yes |
+| compiler `0.2.x` (when tagged) | yes — needs ffmpeg |
+| unreleased / untagged compiler | report design issues as RFCs |
 
 When a compiler exists, only the latest minor on the current major receives
 fixes. Pre-1.0, that is the latest `0.x`.

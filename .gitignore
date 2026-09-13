@@ -29,9 +29,12 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# rust (future)
+# rust
 /target/
 **/*.rs.bk
+
+# local CAS — essence, never git
+.graft/
 
 # editors
 .idea/

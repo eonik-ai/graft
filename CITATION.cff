@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: If you use this software, cite it with these metadata.
+title: graft
+type: software
+authors:
+  - name: eonik
+    website: "https://www.eonik.ai/"
+  - family-names: Senapati
+    given-names: Abinash
+    alias: techievena
+    website: "https://github.com/techievena"
+license: Apache-2.0
+repository-code: "https://github.com/eonik-ai/graft"
+url: "https://github.com/eonik-ai/graft"
+abstract: >-
+  Incremental compiler for video composition. Change a hook,
+  bitstream-copy the body. JSON score, CAS essence, ffmpeg/x264.
+version: "0.2.0"
+keywords:
+  - video
+  - compiler
+  - ffmpeg
+  - incremental-compilation

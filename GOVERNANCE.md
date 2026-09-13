@@ -24,8 +24,9 @@ foundation. It will change when the roster does.
 - **RFCs** (see [CONTRIBUTING.md](CONTRIBUTING.md)) need approval from at
   least two maintainers, including one who did not author the RFC.
 - **ADRs** are merged only with RFC acceptance when they change a principle.
-- **Releases** are tagged by a maintainer from `main`. Schema version in
-  `$id` / `"graft"` fields matches the git tag (`v0.1.0` → `0.1.0`).
+- **Releases** wait until the compiler is real enough to ship. Then a
+  maintainer tags `main`. The format id in `$id` / `"graft"` matches that
+  tag (`v1.0.0` → `1.0.0`). Do not tag workstream milestones.
 
 ## What is in-bounds for core
 

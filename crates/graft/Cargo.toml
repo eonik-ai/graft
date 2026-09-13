@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "graft"
+description = "CLI for the graft compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "graft"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+graft-cas.workspace = true
+graft-compile.workspace = true
+graft-score.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

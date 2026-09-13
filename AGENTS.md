@@ -11,33 +11,29 @@ rename it Graft in prose, headings, or code.
 
 ## What this repo is
 
-Until the Rust CLI exists, the deliverable is:
-
-1. Principles and ADRs that must not be silently rewritten.
-2. Normative JSON Schema in `schema/`.
-3. The worked example in `examples/hook-v3-body-v1-9x16/`.
-4. A tiny Python reference for signal → dirty-set in `ref/`.
-
-Do not scaffold a fake encoder. Do not add a second reference language.
-Do not import eonik GTM, lead lists, or "replace the editor" copy.
+The north star is still the schema, the worked example, and the Python
+signal → dirty-set reference. Do not import eonik GTM, lead lists, or
+"replace the editor" copy. First compiler GitHub tag is `v0.2.0` (not
+spec `v0.1.0`). crates.io stays unpublished until that tag.
 
 ## Build and test
 
 ```sh
-make test    # schema + examples + north-star unit tests
-make lint    # JSON parse, python compileall
-make fmt     # no-op until a formatter is pinned
+make test # schema + examples + north-star unit tests + cargo test
+make lint # JSON parse, python compileall, rustfmt, clippy
+make fmt  # cargo fmt
 ```
 
 CI must call these targets, not ad-hoc commands.
 
-## Architecture (when code lands)
+## Architecture
 
 ```
 schema/     normative contract (JSON Schema 2020-12)
 examples/   fixtures the compiler must match
 ref/        Python reference for rules that can be unit-tested without ffmpeg
-crates/     future Rust: graft (CLI), graft-score, graft-cas, graft-compile
+crates/     graft → graft-compile → graft-cas → graft-score
+             (see docs/architecture.md)
 docs/adr/   append-only decisions
 ```
 
@@ -50,15 +46,17 @@ on score, never the reverse. `ref/` must not import adapter code.
 | --- | --- |
 | Object, field, enum on the IR | `schema/*.schema.json` + `docs/schema.md` |
 | Signal addressing, spill, hook window | `ref/graft_ref/signal.py` + `docs/time-map.md` + example `dirty.json` |
-| Cache / kerf / grain | `docs/compile.md` (and later `crates/graft-compile`) |
+| Cache / kerf / grain | `docs/compile.md` + `crates/graft-compile` |
 | Irreversible decision | new `docs/adr/NNNN-….md` — never edit an accepted ADR's decision section |
 | Guest NLE | `docs/adapters.md` only, with loss. RFC if you claim less loss |
-| Rust implementation | `crates/` as named above, Apache-2.0 SPDX headers |
+| Rust implementation | `crates/` as named in [docs/architecture.md](docs/architecture.md). Encode implements `EncodeBackend` against Action + CAS. Stores implement blobs + action cache. |
 
 ## Tests
 
 - Python: stdlib `unittest`, files `ref/tests/test_*.py`.
-- The test `test_hook_rate_does_not_dirty_body` is load-bearing. Do not
+- Rust: `crates/*/src` and `crates/graft/tests`. `cargo test` must keep
+  `hook_rate` on `[0, 3)` from dirtying `body` in the worked example.
+- The Python test `test_hook_rate_does_not_dirty_body` is load-bearing. Do not
   delete it to make a change pass. If the rule changes, an RFC comes first
   and the test changes in the same PR.
 - No media files in git. Fixtures are JSON.

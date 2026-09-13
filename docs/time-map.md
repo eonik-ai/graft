@@ -7,8 +7,11 @@ on the **score clock**. The time map is the join.
 dest_t  →  slot_id
 ```
 
-It is an output of compile, stored next to the build. Retiming
-regenerates it. Without it, "hook is weak" cannot address a node.
+It is an output of compile, stored next to the build under
+`.graft/builds/<scion_hash>/time-map.json`. Today the map is identity
+(score clock = dest clock). Retiming is not implemented; when it is, the
+compiler regenerates this file. Without a time map, "hook is weak" cannot
+address a node.
 
 ## Signal
 
