@@ -14,7 +14,8 @@ fixes. Pre-1.0, that is the latest `0.x`.
 
 **Do not open a public issue.**
 
-Use GitHub's **private vulnerability reporting** on this repository
+Use GitHub's **private vulnerability reporting** on
+[eonik-ai/graft](https://github.com/eonik-ai/graft/security/advisories/new)
 (Security → Report a vulnerability). Triage is
 [@techievena](https://github.com/techievena) on behalf of eonik.
 If that UI is unavailable, email [connect@eonik.ai](mailto:connect@eonik.ai)

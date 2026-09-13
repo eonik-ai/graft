@@ -1,3 +1,6 @@
+[![CI](https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg)](https://github.com/eonik-ai/graft/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 # graft
 
 graft is a compiler for video composition.
@@ -42,7 +45,7 @@ Pre-1.0: the schema may change. Breaking schema changes are always an RFC.
 ## Quick start
 
 ```sh
-git clone <this-repo> graft
+git clone https://github.com/eonik-ai/graft.git
 cd graft
 make test
 ```

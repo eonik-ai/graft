@@ -56,8 +56,8 @@ It does not land in `schema/` or `ref/` without an RFC that amends
 - **Contributors** are first-class. There is **no CLA** and **no
   copyright assignment**. You keep copyright on your patches. DCO
   (`Signed-off-by`) plus Apache §5 is how they enter the tree.
-- The intended GitHub home is the [eonik-ai](https://github.com/eonik-ai)
-  organisation. Project lead is listed in [MAINTAINERS.md](MAINTAINERS.md).
+- The GitHub home is [github.com/eonik-ai/graft](https://github.com/eonik-ai/graft).
+  Project lead is listed in [MAINTAINERS.md](MAINTAINERS.md).
 
 ## Assets
 
