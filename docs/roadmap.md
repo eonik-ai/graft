@@ -22,9 +22,10 @@ still unpublished.
 - Semantic diff and three-way merge; porcelain-light `graft status`.
 - Build records, exact time maps, feedback ingest, `graft iterate`.
 - Sequential compiler: `graft-intra`, closed-GOP x264, synchronized AAC,
+  applied `params.speed`, Long-GOP kerf fill for non-IDR joins,
   `ActionResult` provenance, concat verification, object-store sync.
 - Scoped OTIO export/import with a machine-readable loss report.
-- Local decode-and-composite preview.
+- Local decode-and-composite preview with synced audio.
 
 ## Still later / never in core
 
