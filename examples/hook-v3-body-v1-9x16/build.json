@@ -1,0 +1,8 @@
+{
+  "graft": "0.2.0",
+  "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "scion": "hook_v3+body_v1+cta_v1@9x16",
+  "scion_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "dest_id": "9x16",
+  "time_map": "time-map.json"
+}

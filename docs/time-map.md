@@ -1,51 +1,50 @@
 # Time map
 
 A platform metric is a time range on the **shipped** file. A slot lives
-on the **score clock**. The time map is the join.
+on the **score clock**. The time map is the join, stored under the exact
+build identity.
 
 ```
-dest_t  →  slot_id
+build → time map → dest frames → slot_id
 ```
 
-It is an output of compile, stored next to the build under
-`.graft/builds/<scion_hash>/time-map.json`. Today the map is identity
-(score clock = dest clock). Retiming is not implemented; when it is, the
-compiler regenerates this file. Without a time map, "hook is weak" cannot
-address a node.
+Compile emits that map with dest ranges, source ranges, `scion`,
+`scion_hash`, and `build`. `graft signal` and `graft feedback ingest`
+read only that artifact. A root `time-map.json` is a fixture, not
+sufficient provenance for a live workspace.
 
 ## Signal
 
 ```
-signal := (kind, [t0, t1), dest_id)
+signal := (kind, declared or explicit range, dest_id, build)
 ```
 
-Dirty slots = time-map entries whose span intersects `[t0, t1)`.
+If the score declares a window for `kind`, that range is used even when
+the caller passes another `--t`. Dirty slots = time-map entries whose
+dest range intersects the addressed range.
 
 ### hook_rate rule
 
-`kind = hook_rate` **always** includes the slot with `role: hook`.
+For `kind = hook_rate`, always include the slot with `role: hook`.
 
-If the 3s window bleeds into body, **drop body** from the dirty set when
-the overlap is strictly less than `spill_threshold_s` (default **0.35**).
-Warn when overlap ≥ threshold: pad the hook to the declared window, or
-accept a dirty body.
+If the declared window bleeds into body, **drop body** from the dirty set
+when the overlap is strictly less than `spill_threshold_frames` (default
+**11** frames, 0.367s at 30fps). Warn when overlap ≥ threshold: pad the
+hook to the declared window, or accept a dirty body.
 
-This is the rule that keeps a 2.8s creative hook from recutting the body
-because Meta still scores 0–3s.
-
-The window is **declared** on the score (`slot.window`). It is not
-inferred from the binding's `out_s - in_s`.
+The window is **declared** on the score (`slot.window`). It is not inferred
+from the binding duration.
 
 ## Worked map (23s @ 30fps, 9x16)
 
-| Dest time | Slot | Typical signal |
+| Dest frames | Slot | Typical signal |
 | --- | --- | --- |
-| `[0.00, 3.00)` | hook | hook_rate, thumbstop |
-| `[3.00, 20.00)` | body | hold / "too slow" on 8–12s |
-| `[20.00, 23.00)` | cta | click-through, end-card skip |
+| `[0, 90)` | hook | hook_rate, thumbstop |
+| `[90, 600)` | body | hold / "too slow" on 8–12s |
+| `[600, 690)` | cta | click-through, end-card skip |
 
-`graft signal --kind hook_rate --t 0-3` → slots `{hook}`, kerfs
-`{hook→body}`. `body_v1` stays clean.
+Current behavior: `graft signal --kind hook_rate --build <id>` → slots
+`{hook}`, kerfs `{hook→body}`. `body_v1` stays clean.
 
 Reference implementation: [`ref/graft_ref/signal.py`](../ref/graft_ref/signal.py).
 The test in `ref/tests/test_signal.py` is part of the spec.

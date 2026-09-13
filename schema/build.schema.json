@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:graft:schema:build:0.2.0",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "graft build record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["graft", "id", "scion", "scion_hash", "dest_id", "time_map"],
+  "properties": {
+    "graft": { "const": "0.2.0" },
+    "id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "scion": { "type": "string", "minLength": 1 },
+    "scion_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "dest_id": { "type": "string", "minLength": 1 },
+    "time_map": { "type": "string", "minLength": 1 },
+    "output": { "type": "string", "minLength": 1 }
+  }
+}

@@ -24,14 +24,14 @@ def structural_score(doc: dict, path: Path) -> None:
     for key in ("graft", "concept", "clock", "slots"):
         if key not in doc:
             raise SystemExit(f"{path}: missing {key}")
-    if doc["graft"] != "0.1.0":
-        raise SystemExit(f"{path}: graft version {doc['graft']!r} != '0.1.0'")
+    if doc["graft"] != "0.2.0":
+        raise SystemExit(f"{path}: graft version {doc['graft']!r} != '0.2.0'")
     if not doc["slots"]:
         raise SystemExit(f"{path}: slots must be non-empty")
 
 
 def structural_scion(doc: dict, path: Path) -> None:
-    for key in ("graft", "id", "concept", "dest", "bindings"):
+    for key in ("graft", "id", "concept", "dest", "layers"):
         if key not in doc:
             raise SystemExit(f"{path}: missing {key}")
     if "9:16" in doc["id"] and "9x16" not in doc["id"]:
@@ -39,7 +39,7 @@ def structural_scion(doc: dict, path: Path) -> None:
 
 
 def structural_time_map(doc: dict, path: Path) -> None:
-    for key in ("graft", "scion", "dest_id", "entries"):
+    for key in ("graft", "build", "scion", "scion_hash", "dest_id", "rate", "entries"):
         if key not in doc:
             raise SystemExit(f"{path}: missing {key}")
 
@@ -60,11 +60,14 @@ def check_example_consistency(example: Path) -> None:
     if not isinstance(score, dict) or not isinstance(scion, dict) or not isinstance(time_map, dict):
         raise SystemExit(f"{example}: score/scion/time-map must be objects")
     slot_ids = {slot["id"] for slot in score["slots"]}
-    unknown = set(scion["bindings"]) - slot_ids
+    bindings = {}
+    for layer in scion["layers"]:
+        bindings.update(layer["bindings"])
+    unknown = set(bindings) - slot_ids
     if unknown:
         raise SystemExit(f"{example}: scion binds unknown slots {sorted(unknown)}")
     required = {slot["id"] for slot in score["slots"] if not slot.get("optional")}
-    unbound = required - set(scion["bindings"])
+    unbound = required - set(bindings)
     if unbound:
         raise SystemExit(f"{example}: required slots unbound {sorted(unbound)}")
     map_slots = {entry["slot"] for entry in time_map["entries"]}

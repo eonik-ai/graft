@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:graft:schema:feedback:0.2.0",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "graft feedback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["graft", "id", "build", "kind", "range", "raw"],
+  "properties": {
+    "graft": { "const": "0.2.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "build": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "kind": { "type": "string", "minLength": 1 },
+    "range": { "$ref": "#/$defs/range" },
+    "raw": {},
+    "resolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slots", "kerfs", "warnings"],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        },
+        "kerfs": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "duration": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@
   </a>
   <h1>graft</h1>
   <p><strong>Change the hook. Keep the body.</strong></p>
-  <p>An incremental compiler for video composition. JSON score, immutable essence, action-cache builds.</p>
+  <p>A local-first composition workspace. The incremental compiler is its build engine.</p>
   <p>
     <a href="#get-started">Get started</a> ·
     <a href="docs/mission.md">Mission</a> ·
@@ -34,37 +34,46 @@
 
 The score is source. Essence is immutable. The mp4 is a compile.
 
-Change a hook and compile again. `graft` encodes the hook, recuts its join,
-bitstream-copies the body, and links a new mp4. git versions the JSON score;
-CAS stores the source material; the action cache keeps every clean encode.
+The founding loop is concept → scions → team iteration → shipped build →
+signal → addressed slot → new scion. Git owns recipe history; graft owns
+composition semantics and compilation; CAS stores immutable source material;
+the action cache keeps derived encodes.
+
+Change a hook and compile again: `graft` encodes the hook, bitstream-copies
+the body, and links a new dest. A platform signal against that exact build
+names the hook without recutting the tree.
 
 ![graft CLI compiling, rebinding a hook, and keeping body and cta clean](docs/assets/landing.gif)
 
 _A real local session, recorded with [asciinema](https://github.com/asciinema/asciinema).
 The replay source is [`landing.cast`](docs/assets/landing.cast)._
 
-## What graft can do
+## What graft can do today
 
-- Compile named `hook`, `body`, `proof`, and `cta` slots into an mp4 dest
-- Reuse clean slot encodes from a content-addressed action cache
+- Keep one concept and many inherited scions as Git-tracked recipes
+- Bind by scion and layer; flatten strongest-layer opinions
+- Show semantic diff and three-way merge without merging media
+- Compile named `hook`, `body`, `proof`, and `cta` slots to a dest
+- Cache synchronized AAC independently and mux it with the video link
 - Re-encode a changed hook while bitstream-copying the unchanged body
-- Map a platform signal such as `hook_rate` on `[0, 3)` back to the dirty slot
-- Run Long-GOP x264 through system ffmpeg, or frame-grain `graft-intra` in-tree
-- Print the action graph and cache decision as JSON before or after an encode
+- Resolve `hook_rate` through the declared window and the shipped time map
+- Export/import a scoped OTIO subset with an explicit loss report
+- Preview a selected scion by decode and composite
+- Sync blobs to an object-store root with missing-blob discovery
 
 ## What it cannot do
 
-graft does not yet apply speed/retime, composite layer overlays, compile audio,
-export to an NLE, render a live preview, or use S3. It is not git-on-pixels, a
-lossless round-trip to every NLE, a lock server, a DAM, or a review tool.
-Adapters are guests and their loss is documented.
+graft does not apply speed/retime, repair arbitrary mid-GOP sources, or
+round-trip NLE effects, grades, or generators. It is not Git-on-pixels, a
+replacement for Git history, a lock server, a DAM, or a review tool.
 
-The compiler, action graph, filesystem CAS, frame-grain backend, and system
-ffmpeg/x264 path are in-tree. Schema format id `0.1.0` is not a crate version.
+The sequential compiler, action graph, filesystem CAS, object-store
+transport, frame-grain backend, and system ffmpeg/x264 path are in-tree.
+Schema format id `0.2.0` is not a crate version.
 The first compiler GitHub tag is `v0.2.0`; do not reuse the spec tag `v0.1.0`.
 Breaking schema changes need an RFC.
 
-## Install
+## Get started
 
 Runtime: **ffmpeg** and **ffprobe** on `PATH` (or `$FFMPEG` / `$FFPROBE`).
 graft shells out; it does not link GPL x264. Rust 1.85+ (`rustup`).
@@ -92,31 +101,35 @@ mkdir ad && cd ad
 graft init
 graft slot body --span 3-20
 graft slot cta --span 20-23 --role cta
-graft scion 9x16 --dest 1080x1920 --encoder x264
+graft scion create 9x16 --dest 1080x1920 --encoder x264
 graft bind hook ./hook.mov
 graft bind body ./body.mov
 graft bind cta ./cta.mov
 graft compile --out ad.mp4
 ```
 
-Play `ad.mp4`. Now bind a different hook:
+Play `ad.mp4`. Fork a hook scion and bind a different take:
 
 ```sh
-graft bind hook ./hook-v2.mov
-graft dirty
-graft compile --out ad-v2.mp4
+graft scion fork 9x16 hook-v2
+graft bind hook ./hook-v2.mov --scion hook-v2
+graft diff 9x16 hook-v2
+graft compile --scion hook-v2 --out ad-v2.mp4
+graft dirty --scion hook-v2
 ```
 
 `graft dirty` names `hook` and its hook→body kerf. `body` and `cta` are clean;
 their encoded bytes are reused.
 
-Address a platform metric through the time map:
+Address a platform metric through the shipped build:
 
 ```sh
-graft signal --kind hook_rate --t 0-3
+graft signal --kind hook_rate --build <build-id>
+graft iterate --from <build-id> --feedback <id> --scion hook-v3
 ```
 
-That dirties `hook` plus the hook→body kerf, not `body`.
+That dirties `hook` plus the hook→body kerf, not `body`. `iterate` forks a
+change request; it does not invent the replacement clip.
 
 The worked example is JSON only (placeholder hashes, no media in git), so its
 compile prints a **plan**. Your own clips compile to mp4.

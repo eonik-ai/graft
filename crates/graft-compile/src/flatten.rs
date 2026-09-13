@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use graft_score::{Binding, Layer, Scion, Score};
+use graft_score::{effective_bindings, Binding, Layer, Scion, Score};
 
 /// One binding per slot after layer strength is resolved.
 #[derive(Clone, Debug)]
@@ -13,6 +13,7 @@ pub struct Flattened {
     pub bindings: BTreeMap<String, Binding>,
 }
 
+#[allow(dead_code)]
 pub fn layer_strength(layer: Layer) -> u8 {
     match layer {
         Layer::Base => 0,
@@ -22,22 +23,12 @@ pub fn layer_strength(layer: Layer) -> u8 {
     }
 }
 
-/// Schema 0.1.0 has a single binding map on the scion. Strength is recorded
-/// so overlay layers can win later; today flatten is that map.
-pub fn flatten(score: &Score, scion: &Scion) -> Flattened {
-    let _ = strongest_layer(score);
-    Flattened {
-        bindings: scion.bindings.clone(),
-    }
-}
-
-fn strongest_layer(score: &Score) -> Layer {
-    score
-        .layers
-        .iter()
-        .copied()
-        .max_by_key(|l| layer_strength(*l))
-        .unwrap_or(Layer::Base)
+/// Strongest declared layer wins per slot. Inheritance is resolved before
+/// this flatten so the scion already carries parent opinions.
+pub fn flatten(score: &Score, scion: &Scion) -> Result<Flattened, graft_score::Error> {
+    Ok(Flattened {
+        bindings: effective_bindings(score, scion)?,
+    })
 }
 
 #[cfg(test)]

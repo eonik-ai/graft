@@ -3,7 +3,7 @@
 use graft_score::{Dest, Slot};
 
 use crate::grain::Grain;
-use crate::graph::{KerfAction, SlotEncodeAction};
+use crate::graph::{AudioEncodeAction, KerfAction, SlotEncodeAction};
 
 /// A backend that produces `slot_encode` / kerf **bytes**. The pipeline
 /// puts them in CAS and records the action cache. Implement this against
@@ -19,7 +19,15 @@ pub trait EncodeBackend {
 
     fn encode_slot(&self, req: &SlotEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError>;
 
+    fn encode_audio(&self, req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError>;
+
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError>;
+}
+
+pub struct AudioEncodeRequest<'a> {
+    pub action: &'a AudioEncodeAction,
+    pub dest: &'a Dest,
+    pub material: &'a [u8],
 }
 
 pub struct SlotEncodeRequest<'a> {
@@ -53,6 +61,10 @@ impl EncodeBackend for Unimplemented {
     }
 
     fn encode_kerf(&self, _req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
+        Err(EncodeError::Unimplemented)
+    }
+
+    fn encode_audio(&self, _req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
         Err(EncodeError::Unimplemented)
     }
 }

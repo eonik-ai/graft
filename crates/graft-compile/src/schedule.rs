@@ -2,7 +2,7 @@
 
 use graft_cas::{ActionKey, BlobId, Kind, Store};
 
-use crate::graph::{ActionGraph, ConcatAction, KerfAction, SlotEncodeAction};
+use crate::graph::{ActionGraph, AudioEncodeAction, ConcatAction, KerfAction, SlotEncodeAction};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CacheStatus {
@@ -39,6 +39,12 @@ pub struct ScheduledKerf {
 }
 
 #[derive(Clone, Debug)]
+pub struct ScheduledAudio {
+    pub action: AudioEncodeAction,
+    pub cache: CacheStatus,
+}
+
+#[derive(Clone, Debug)]
 pub struct ScheduledConcat {
     pub action: ConcatAction,
     pub cache: CacheStatus,
@@ -48,6 +54,7 @@ pub struct ScheduledConcat {
 #[derive(Clone, Debug)]
 pub struct Schedule {
     pub slots: Vec<ScheduledSlot>,
+    pub audio: Vec<ScheduledAudio>,
     pub kerfs: Vec<ScheduledKerf>,
     pub concat: ScheduledConcat,
 }
@@ -55,7 +62,12 @@ pub struct Schedule {
 fn lookup(store: &dyn Store, key: &ActionKey, kind: Kind) -> Result<CacheStatus, graft_cas::Error> {
     match store.get_action(key)? {
         Some(entry) if entry.kind == kind && store.contains_blob(kind, &entry.blob) => {
-            Ok(CacheStatus::Hit { blob: entry.blob })
+            let bytes = store.get_blob(kind, &entry.blob)?;
+            if bytes.len() as u64 == entry.size {
+                Ok(CacheStatus::Hit { blob: entry.blob })
+            } else {
+                Ok(CacheStatus::Miss)
+            }
         }
         _ => Ok(CacheStatus::Miss),
     }
@@ -76,12 +88,20 @@ pub fn schedule(graph: &ActionGraph, store: &dyn Store) -> Result<Schedule, graf
             cache: lookup(store, &action.key, Kind::Kerf)?,
         });
     }
+    let mut audio = Vec::new();
+    for action in &graph.audio {
+        audio.push(ScheduledAudio {
+            action: action.clone(),
+            cache: lookup(store, &action.key, Kind::AudioEncode)?,
+        });
+    }
     let concat = ScheduledConcat {
         action: graph.concat.clone(),
         cache: lookup(store, &graph.concat.key, Kind::Concat)?,
     };
     Ok(Schedule {
         slots,
+        audio,
         kerfs,
         concat,
     })
@@ -101,7 +121,7 @@ mod tests {
         let score = load_score(&dir.join("score.json")).unwrap();
         let current = load_scion(&dir.join("scion.json")).unwrap();
         let mut prev = current.clone();
-        prev.bindings.get_mut("hook").unwrap().material =
+        prev.layers[0].bindings.get_mut("hook").unwrap().material =
             "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into();
 
         let store = Memory::new();
@@ -117,10 +137,7 @@ mod tests {
             store
                 .put_action(
                     &slot.key,
-                    CacheEntry {
-                        kind: Kind::SlotEncode,
-                        blob,
-                    },
+                    CacheEntry::new(Kind::SlotEncode, blob, slot.slot.id.len() as u64),
                 )
                 .unwrap();
         }
@@ -133,10 +150,7 @@ mod tests {
         store
             .put_action(
                 &body_cta.key,
-                CacheEntry {
-                    kind: Kind::Kerf,
-                    blob: kerf_blob,
-                },
+                CacheEntry::new(Kind::Kerf, kerf_blob, b"body-cta".len() as u64),
             )
             .unwrap();
 

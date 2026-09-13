@@ -1,7 +1,22 @@
 <div align="center">
-  <a href="https://github.com/eonik-ai/graft"><img src="docs/brand/mark.png" alt="Два клипа. Одно соединение." width="120" /></a>
+  <a href="https://github.com/eonik-ai/graft">
+    <img src="docs/brand/mark.png" alt="Два клипа. Одно соединение." width="120" />
+  </a>
   <h1>graft</h1>
   <p><strong>Меняйте hook. Сохраняйте body.</strong></p>
+  <p>Локальный workspace композиции. Инкрементальный компилятор — его движок сборки.</p>
+  <p>
+    <a href="#начало-работы">Начало работы</a> ·
+    <a href="docs/mission.md">Mission</a> ·
+    <a href="schema/">Schema</a> ·
+    <a href="docs/roadmap.md">Roadmap</a>
+  </p>
+  <p>
+    <a href="https://github.com/eonik-ai/graft/actions/workflows/ci.yml"><img src="https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-18181B?style=flat-square" alt="Apache-2.0 license" /></a>
+    <img src="https://img.shields.io/badge/Rust-1.85%2B-B7410E?style=flat-square" alt="Rust 1.85+" />
+    <img src="https://img.shields.io/badge/runtime-ffmpeg-007808?style=flat-square" alt="ffmpeg runtime" />
+  </p>
   <p>
     <a href="README.md">English</a> ·
     <a href="README.es.md">Español</a> ·
@@ -18,33 +33,59 @@
 ---
 
 score — источник. essence неизменна. mp4 — результат компиляции.
-Подставляете новый hook. body остаётся.
 
-git версионирует **score** (JSON). CAS версионирует essence. action cache
-версионирует кодирования, поэтому смена hook копирует body битстримом.
-graft — не NLE. Среда выполнения — **ffmpeg** и **ffprobe** в `PATH`.
+Основательский цикл: concept → scions → итерация команды → отгруженный
+build → signal → адресованный slot → новый scion. Git владеет историей
+рецепта; graft владеет семантикой композиции и компиляцией; CAS хранит
+неизменный исходный материал; action cache хранит производные encodes.
+
+Смените hook и скомпилируйте снова: `graft` кодирует hook, копирует body
+битстримом и связывает новый dest. Платформенный signal против этого
+точного build называет hook, не перерезая дерево.
 
 ![graft CLI компилирует, привязывает другой hook и сохраняет body и cta чистыми](docs/assets/landing.gif)
 
 _Настоящий локальный сеанс, записанный с [asciinema](https://github.com/asciinema/asciinema).
 Исходник воспроизведения — [`landing.cast`](docs/assets/landing.cast)._
 
+## Что graft умеет сегодня
+
+- Хранить один concept и много унаследованных scion как рецепты в Git
+- Делать bind по scion и layer; сглаживать мнения самой сильной layer
+- Показывать семантический diff и трёхсторонний merge без слияния медиа
+- Компилировать именованные слоты `hook`, `body`, `proof` и `cta` в dest
+- Кэшировать синхронизированный AAC отдельно и muxить его с видеосвязкой
+- Перекодировать изменённый hook и копировать неизменный body битстримом
+- Разрешать `hook_rate` через объявленное окно и отгруженную time map
+- Экспортировать/импортировать ограниченное подмножество OTIO с отчётом о потерях
+- Предпросматривать выбранный scion через decode и composite
+- Синхронизировать blob в корень object-store с поиском недостающих blob
+
+## Чего он не умеет
+
+graft не применяет speed/retime, не чинит произвольные mid-GOP источники и
+не гоняет туда-обратно эффекты, grades или generators NLE. Это не Git-на-пикселях,
+не замена истории Git, не сервер блокировок, не DAM и не инструмент рецензии.
+
+Последовательный компилятор, граф действий, файловый CAS, транспорт
+object-store, кадровый backend и системный путь ffmpeg/x264 уже в дереве.
+format id схемы `0.2.0` — не версия crate.
+Первый тег GitHub компилятора/workspace — `v0.2.0`; не используйте повторно
+спецификационный тег `v0.1.0`.
+Несовместимые изменения схемы идут через RFC.
+
 ## Начало работы
 
-### Требования
-
-graft вызывает системный ffmpeg; GPL x264 не линкуется. Rust 1.85+ (`rustup`).
-`$FFMPEG` / `$FFPROBE` подменяют двоичные файлы из `PATH`.
-
-### Установка
+Среда: **ffmpeg** и **ffprobe** в `PATH` (или `$FFMPEG` / `$FFPROBE`).
+graft вызывает систему; GPL x264 не линкуется. Rust 1.85+ (`rustup`).
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
 graft --help
 ```
 
-Двоичные файлы GitHub Release (когда будет срезан тег `v0.2.*`): macOS arm64
-и Linux x64. crates.io ещё не опубликован (`publish = false`).
+Бинарники GitHub Release появятся при теге `v0.2.*`: macOS arm64 и Linux x64.
+crates.io пока не опубликован (`publish = false`).
 
 Из клона:
 
@@ -52,111 +93,70 @@ graft --help
 git clone https://github.com/eonik-ai/graft.git
 cd graft
 make test
-cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 ```
 
-Рабочий пример — только JSON (заглушки хешей, в git нет медиа).
-`graft compile` там печатает **plan**. Ваши клипы компилируются в mp4.
-
-### Запустить первую компиляцию
+Первая компиляция:
 
 ```sh
 mkdir ad && cd ad
 graft init
 graft slot body --span 3-20
 graft slot cta --span 20-23 --role cta
-graft scion 9x16 --dest 1080x1920 --encoder x264
+graft scion create 9x16 --dest 1080x1920 --encoder x264
 graft bind hook ./hook.mov
 graft bind body ./body.mov
 graft bind cta ./cta.mov
 graft compile --out ad.mp4
 ```
 
-Воспроизведите `ad.mp4`. Заново привяжите hook и скомпилируйте ещё раз:
-`graft dirty` показывает `body` **hit**. Кодирование body копируется битстримом.
-dest — продукт линковщика, никогда не essence.
+Воспроизведите `ad.mp4`. Сделайте fork scion hook и bind другой дубль:
 
 ```sh
-graft signal --kind hook_rate --t 0-3
+graft scion fork 9x16 hook-v2
+graft bind hook ./hook-v2.mov --scion hook-v2
+graft diff 9x16 hook-v2
+graft compile --scion hook-v2 --out ad-v2.mp4
+graft dirty --scion hook-v2
 ```
 
-печатает `{hook}` и kerf hook→body, не `body`.
+`graft dirty` называет `hook` и kerf hook→body. `body` и `cta` чистые;
+их закодированные байты переиспользуются.
 
-Сейчас не поддерживается: speed/retime, наложение слоёв, звук, экспорт в NLE.
-`params.speed` меняет только action key.
+Адресуйте платформенную метрику через отгруженный build:
 
-## Состояние проекта
-
-| Часть | Состояние |
-| --- | --- |
-| Mission, principles, ADR | записаны |
-| Score / scion / time-map schema | format id `0.1.0` |
-| Signal → dirty-set (`hook_rate` не dirty-ит body) | `ref/` + Rust |
-| Action graph + action cache | `graft-compile` / `graft-cas` |
-| Кадр как зерно (`graft-intra`) | в дереве; dest — `GFI1`, не файл плеера |
-| Long-GOP x264 mp4 | системный ffmpeg; closed-GOP файлы slot; concat `-c copy` |
-| Адаптеры NLE / preview / S3 | не в этом выпуске |
-
-format id `0.1.0` у schema — не версия crate. Первый GitHub-тег компилятора —
-`v0.2.0` (не используйте повторно spec-тег `v0.1.0`). Ломающие изменения
-schema идут через RFC.
-
-## Чем graft не является
-
-- Не git по пикселям. Не делайте xdelta готового mp4.
-- Не lossless туда-обратно в каждый NLE. Адаптеры — гости; потери задокументированы.
-- Не сервер блокировок, не DAM и не инструмент ревью.
-
-Соседи (git, OTIO, IMF, ffmpeg concat) — в [docs/comparison.md](docs/comparison.md).
-
-## Поверхность команд
-
-```text
-graft init
-graft slot hook --window 0-3
-graft bind hook ./hooks/v3.mov
-graft scion 9x16 --dest 1080x1920 --encoder x264
-graft compile --out ad.mp4
-graft dirty
-graft signal --kind hook_rate --t 0-3
+```sh
+graft signal --kind hook_rate --build <build-id>
+graft iterate --from <build-id> --feedback <id> --scion hook-v3
 ```
 
-`export` не реализован. `--encoder graft-intra` — бэкенд покадрового зерна
-(тесты / image-seq), не dest QuickTime.
+Это пачкает `hook` плюс kerf hook→body, не `body`. `iterate` делает fork
+запроса на изменение; он не изобретает заменяющий клип.
 
-## Следующие шаги
+Рабочий пример — только JSON (заглушки хешей, без медиа в git), поэтому
+его compile печатает **plan**. Ваши клипы компилируются в mp4.
 
-Документация для реализаторов на английском. [Переводы этого README](docs/TRANSLATING.md).
+## Безопасность
 
-| Документ | Что фиксирует |
-| --- | --- |
-| [docs/mission.md](docs/mission.md) | Зачем существует graft |
-| [docs/principles.md](docs/principles.md) | Непереговорное и не-цели |
-| [docs/glossary.md](docs/glossary.md) | score, slot, scion, kerf, dest |
-| [docs/architecture.md](docs/architecture.md) | Слои, граф crate, конвейер compile |
-| [docs/schema.md](docs/schema.md) | Комментарий к нормативному JSON Schema |
-| [docs/compile.md](docs/compile.md) | Ключи кэша, grain, smart concat |
-| [docs/time-map.md](docs/time-map.md) | Как метрика адресует slot |
-| [docs/adapters.md](docs/adapters.md) | Матрица потерь |
-| [docs/comparison.md](docs/comparison.md) | git, OTIO, IMF, Vit, Aspect |
-| [docs/roadmap.md](docs/roadmap.md) | Работа впереди |
-| [docs/brand/](docs/brand/) | Знак: два клипа, одно соединение |
-| [docs/adr/](docs/adr/) | Уже принятые решения |
+Локальные байты материала и выходы сборки живут в `.graft/`, который
+игнорируется. Не коммитьте essence (`.mov`, `.mp4`, `.mxf`) и учётные данные.
+О уязвимостях сообщайте приватно через [SECURITY.md](SECURITY.md).
 
-Нормативный машинный контракт: [`schema/`](schema/).
+## Также
 
-## Участие
-
-Прочтите [CONTRIBUTING.md](CONTRIBUTING.md). Изменения schema требуют RFC.
-Каждый коммит нуждается в Developer Certificate of Origin (`Signed-off-by`).
-Будьте доброжелательны: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+| | |
+|---|---|
+| Зачем существует graft | [Mission](docs/mission.md) · [principles](docs/principles.md) |
+| Контракт компилятора | [Architecture](docs/architecture.md) · [cache and kerfs](docs/compile.md) · [time map](docs/time-map.md) |
+| Машинный контракт | [JSON Schema](schema/) · [worked example](examples/hook-v3-body-v1-9x16/) |
+| Границы | [git, OTIO, IMF, ffmpeg concat](docs/comparison.md) · [adapter loss matrix](docs/adapters.md) |
+| Проект | [Roadmap](docs/roadmap.md) · [contributing](CONTRIBUTING.md) · [translations](docs/TRANSLATING.md) |
 
 ## Лицензия
 
 Copyright 2026 [eonik](https://www.eonik.ai/) ([github.com/eonik-ai](https://github.com/eonik-ai)).
 
 Лицензировано по [Apache License, Version 2.0](LICENSE).
-Патентный грант — причина Apache-2.0, а не MIT.
-Участники — первого класса: нет CLA и нет уступки авторских прав.
-Вы сохраняете авторские права на свои патчи; DCO и Apache §5 лицензируют их внутрь.
+Патентная лицензия — причина Apache-2.0, а не MIT.
+Участники первого класса: нет CLA и нет уступки авторских прав.
+Вы сохраняете авторство патчей; DCO и Apache §5 лицензируют их внутрь.
 См. [NOTICE](NOTICE) и [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,33 +1,60 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:graft:schema:time-map:0.1.0",
+  "$id": "urn:graft:schema:time-map:0.2.0",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "graft time map",
-  "description": "Compile output. dest_t → slot_id for one shipped build. Regenerated on retime.",
+  "description": "Exact build artifact mapping shipped frame ranges to slots and source ranges.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["graft", "scion", "dest_id", "entries"],
+  "required": ["graft", "build", "scion", "scion_hash", "dest_id", "rate", "entries"],
   "properties": {
-    "graft": { "const": "0.1.0" },
+    "graft": { "const": "0.2.0" },
+    "build": { "type": "string", "minLength": 1 },
     "scion": { "type": "string", "minLength": 1 },
+    "scion_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "dest_id": { "type": "string", "minLength": 1 },
+    "rate": { "$ref": "#/$defs/rate" },
     "entries": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["span", "slot"],
+        "required": ["dest", "source", "slot"],
         "properties": {
-          "span": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 2,
-            "items": { "type": "number", "minimum": 0 },
-            "description": "[t0, t1) on the dest / shipped clock, seconds."
-          },
+          "dest": { "$ref": "#/$defs/range" },
+          "source": { "$ref": "#/$defs/timedRange" },
           "slot": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
         }
+      }
+    }
+  },
+  "$defs": {
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": { "type": "integer", "minimum": 1 },
+        "den": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "duration": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "timedRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rate", "range"],
+      "properties": {
+        "rate": { "$ref": "#/$defs/rate" },
+        "range": { "$ref": "#/$defs/range" }
       }
     }
   }

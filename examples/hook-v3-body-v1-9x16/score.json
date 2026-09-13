@@ -1,33 +1,33 @@
 {
-  "graft": "0.1.0",
+  "graft": "0.2.0",
   "concept": "6f8c2e14-9a71-4d3b-b0e6-1c4d8a7f92ab",
   "clock": {
-    "fps": 30,
-    "duration_s": 23.0
+    "rate": { "num": 30, "den": 1 },
+    "duration_frames": 690
   },
   "slots": [
     {
       "id": "hook",
       "role": "hook",
-      "span": [0.0, 3.0],
+      "range": { "start": 0, "duration": 90 },
       "window": {
         "kind": "hook_rate",
-        "span": [0.0, 3.0]
+        "range": { "start": 0, "duration": 90 }
       }
     },
     {
       "id": "body",
       "role": "body",
-      "span": [3.0, 20.0]
+      "range": { "start": 90, "duration": 510 }
     },
     {
       "id": "cta",
       "role": "cta",
-      "span": [20.0, 23.0],
+      "range": { "start": 600, "duration": 90 },
       "optional": true
     }
   ],
-  "layers": ["base"],
+  "layers": ["base", "copy", "grade", "legal"],
   "dest_default": "9x16",
-  "spill_threshold_s": 0.35
+  "spill_threshold_frames": 11
 }

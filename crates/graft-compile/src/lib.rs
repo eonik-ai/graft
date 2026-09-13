@@ -20,13 +20,17 @@ pub use encode::{EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeReques
 pub use ffmpeg::{probe_bytes, probe_path, FfmpegX264, MaterialKind, Probe};
 pub use flatten::{flatten, Flattened};
 pub use grain::Grain;
-pub use graph::{lower, ActionGraph, ConcatAction, ConcatPart, KerfAction, SlotEncodeAction};
+pub use graph::{
+    lower, ActionGraph, AudioEncodeAction, ConcatAction, ConcatPart, KerfAction, SlotEncodeAction,
+};
 pub use intra::{FrameIntra, IntraSeq};
-pub use keys::{kerf_key, scion_hash, slot_encode_key};
+pub use keys::{audio_encode_key, kerf_key, scion_hash, slot_encode_key};
 pub use pipeline::{compile, materials_present, CompileError, CompileOutcome};
 pub use plan::{
     plan_from_schedule, prev_overlay, time_map_artifact_dir, write_time_map_artifact, CompilePlan,
     KerfPlan, PrevOverlay, SlotPlan,
 };
 pub use schedule::{schedule, CacheStatus, Schedule};
-pub use signal::{dirty_from_signal, DirtySet, Signal};
+pub use signal::{
+    declared_signal_range, dirty_from_signal, dirty_from_signal_range, DirtySet, Signal,
+};

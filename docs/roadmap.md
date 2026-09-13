@@ -1,56 +1,36 @@
 # Roadmap
 
-There is **no product version** until a compiler GitHub tag `v0.2.0`.
-Do not reuse spec tag `v0.1.0`. The `graft` field on JSON is a **format
-id** (`0.1.0` today), not a crate version.
+The first compiler GitHub tag is `v0.2.0`. Do not reuse spec tag
+`v0.1.0`. The `graft` field on JSON is a **format id** (`0.2.0` today),
+not a crate version. crates.io stays unpublished (`publish = false`).
 
-## North star
+## Founding release gate
 
-- Mission, principles, ADRs
-- JSON Schema for score, scion, time map
-- Worked example and signal → dirty-set reference
+A fresh local workspace must complete:
 
-## Score CLI
+> concept → scions → team iteration → shipped build → platform signal →
+> addressed slot → new scion
 
-`graft init | slot | bind | scion | dirty | signal` on JSON.
-`graft compile` schedules from the action cache. With essence in CAS:
-`graft-intra` copies frames; `x264` shells out to ffmpeg and writes mp4.
+That loop is implemented and tagged. Remaining honesty work is crates.io
+still unpublished.
 
-## CAS
+## Implemented
 
-Namespaced blake3 blobs + action cache. Relink by hash. Refuse path-only
-bindings. `ActionKey` ≠ `BlobId`.
+- Mission, principles, accepted ADRs, RFC 0001, normative `0.2.0` schemas.
+- Tracked `scions/<id>.json`, parent inheritance, real layer opinions.
+- Rational/frame time and `graft migrate` from `0.1.0`.
+- Semantic diff and three-way merge; porcelain-light `graft status`.
+- Build records, exact time maps, feedback ingest, `graft iterate`.
+- Sequential compiler: `graft-intra`, closed-GOP x264, synchronized AAC,
+  `ActionResult` provenance, concat verification, object-store sync.
+- Scoped OTIO export/import with a machine-readable loss report.
+- Local decode-and-composite preview.
 
-## Intra compile
+## Still later / never in core
 
-ProRes / image-seq / All-I / `graft-intra`: sample-accurate concat.
-Hook swap does not rewrite body bytes (proven on frame grain).
-
-## Long-GOP kerf
-
-x264 via **system ffmpeg** (`keyint` fixed, `sc_threshold=0`). Closed-GOP
-slot files; concat bitstream-copies hits. Hook swap keeps the body blob.
-Mid-GOP splice on a shared timeline encode is the same kerf node, later.
-
-## OTIO export
-
-Lossy, documented. Slots as markers. Round-trip test: cuts + media refs,
-not effects.
-
-## Signal ingest
-
-CSV/JSON of `(kind, t0, t1, dest)` → dirty set via time map.
-Keep the north-star test.
-
-## Schema freeze (first real release)
-
-No breaking change without a major version. Encoder fingerprint and
-cache keys stable. Device-first compile for intra + Long-GOP cuts
-(no arbitrary effects graph).
-
-## Explicitly later / never in core
-
-- Premiere/Avid/Resolve/CapCut as first-class lossless
+- Arbitrary-source mid-GOP repair
+- Premiere/Avid/Resolve/CapCut as first-class lossless integrations
 - Review UI, DAM, storage mount, project lock
-- Cloud-only IR
+- Remote execution or a cloud-only IR
+- A graft replacement for Git commits and branches
 - Auto-publish to ad platforms

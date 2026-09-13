@@ -46,6 +46,7 @@ pub struct CompilePlan {
     pub encode: bool,
     pub grain: &'static str,
     pub slots: Vec<SlotPlan>,
+    pub audio: Vec<SlotPlan>,
     pub kerfs: Vec<KerfPlan>,
     pub concat: Vec<String>,
     pub concat_cache: &'static str,
@@ -56,6 +57,16 @@ pub struct CompilePlan {
 pub fn plan_from_schedule(graph: &ActionGraph, schedule: &Schedule, encode: bool) -> CompilePlan {
     let slots: Vec<SlotPlan> = schedule
         .slots
+        .iter()
+        .map(|s| SlotPlan {
+            id: s.action.slot.id.clone(),
+            cache: s.cache.as_str(),
+            slot_encode: s.action.key.hex().to_string(),
+            blob: s.cache.blob().map(|b| b.to_string()),
+        })
+        .collect();
+    let audio: Vec<SlotPlan> = schedule
+        .audio
         .iter()
         .map(|s| SlotPlan {
             id: s.action.slot.id.clone(),
@@ -91,6 +102,7 @@ pub fn plan_from_schedule(graph: &ActionGraph, schedule: &Schedule, encode: bool
         encode,
         grain: graph.grain.as_str(),
         slots,
+        audio,
         kerfs,
         concat,
         concat_cache: schedule.concat.cache.as_str(),
@@ -101,12 +113,14 @@ pub fn plan_from_schedule(graph: &ActionGraph, schedule: &Schedule, encode: bool
 /// JSON scion diff. Debug overlay; the action cache is still the oracle.
 pub fn prev_overlay(score: &Score, scion: &Scion, prev: &Scion) -> PrevOverlay {
     let mut slots = BTreeMap::new();
+    let current = graft_score::effective_bindings(score, scion).unwrap_or_default();
+    let previous = graft_score::effective_bindings(score, prev).unwrap_or_default();
     for slot in score.spine() {
-        let Some(binding) = scion.bindings.get(&slot.id) else {
+        let Some(binding) = current.get(&slot.id) else {
             continue;
         };
         let key = slot_encode_key(slot, binding, &scion.dest);
-        let status = match prev.bindings.get(&slot.id) {
+        let status = match previous.get(&slot.id) {
             Some(prev_b) if slot_encode_key(slot, prev_b, &prev.dest).hex() == key.hex() => "hit",
             _ => "miss",
         };

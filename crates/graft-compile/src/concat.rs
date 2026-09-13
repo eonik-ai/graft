@@ -22,6 +22,7 @@ pub struct ConcatRequest<'a> {
     pub action: &'a ConcatAction,
     pub dest: &'a Dest,
     pub parts: &'a [ConcatPartBytes],
+    pub audio_parts: &'a [ConcatPartBytes],
 }
 
 #[derive(Debug, thiserror::Error)]

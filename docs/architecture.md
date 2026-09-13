@@ -1,12 +1,32 @@
 # Architecture
 
-graft is a typed composition graph plus an incremental compiler.
-It is not a video VCS.
+graft is a local-first composition workspace. Its typed composition graph and
+incremental compiler are the build subsystem, not the complete product. It is
+not a video VCS: Git owns recipe history.
 
 This page is the map. New work follows it. If code and this page disagree,
 fix the code or file an RFC — do not invent a parallel layout.
 
-## Three delta layers
+## Founding loop and ownership
+
+```
+concept → scions → team iteration → shipped build
+   ▲                                      │
+   └── new scion ← addressed slot ← signal
+```
+
+| Plane | Owner | Job |
+| --- | --- | --- |
+| History | Git | Commits, branches, textual merge, recipe transport |
+| Workspace | graft | Concepts, scions, layers, semantic diff/conflicts |
+| Build | graft compiler | Flatten, action graph, schedule, encode, exact time map |
+| Feedback | graft | Build provenance, raw signal, resolved slots and kerfs |
+| Interchange | guest adapters | Supported import/export subset plus loss report |
+
+Scion inheritance is a relationship between variants. Git history is a
+relationship between revisions. They are intentionally separate. See ADR 0007.
+
+## Three delta layers inside the build boundary
 
 ```
                     git
@@ -26,14 +46,16 @@ fix the code or file an RFC — do not invent a parallel layout.
                     ▼
               ┌────────────┐
               │slot_encode │  C. build: action cache
-              │   kerf     │     ActionKey → BlobId
+              │audio_encode│     ActionKey → ActionResult
+              │   kerf     │
               │  concat    │
               └────────────┘
 ```
 
 Mixing A/B/C into one "file version" is how "git for video" fails.
-`ActionKey` is recipe + dest + encoder. `BlobId` is bytes. The shipped
-file is never essence. See ADR 0002 and ADR 0006.
+`ActionKey` identifies requested work; `BlobId` identifies bytes. The shipped
+file is never essence. Recipe Git history, CAS blobs, and action-cache entries
+are separate stores. See ADR 0002, ADR 0006, and ADR 0007.
 
 ## Stand on, do not fork
 
@@ -52,15 +74,17 @@ file is never essence. See ADR 0002 and ADR 0006.
 
 ## Device vs server
 
-**Device** (authoritative for edit): score + local store + preview
-composite (decode, like any NLE). Team iteration is recipe commits and
-lock-per-slot, not lock-per-timeline-file. `graft compile` lowers the
-action graph, asks the action cache what is dirty, encodes misses, concats.
+**Device** is authoritative for editing: tracked recipe documents, a local
+store, and decode-and-composite preview. Team iteration uses normal Git plus
+graft's semantic diff/conflict model; graft does not introduce a project lock.
+`graft compile` lowers the selected scion, asks the local action cache what is
+dirty, encodes supported misses, and concatenates.
 
-**Server**: the same compiler. Object store of materials, slot_encodes, and
-kerfs. Optional mastering backend: emit IMF CPL + MXF so a supplemental
-package is a new CPL plus changed track files. No custom entropy-coded
-mp4 delta. No CapCut cloud render — there is no public API.
+**Server** uses the same compiler and IR with a different store. `graft store`
+pushes and pulls namespaced blobs and action results to an object-store root
+with resumable writes and missing-blob discovery. There is no remote
+execution, DAM, or review product. No custom entropy-coded mp4 delta and no
+CapCut cloud render.
 
 ## Crate graph
 
@@ -68,9 +92,10 @@ Dependency direction is one way:
 
 ```
 graft (CLI)
-  └─► graft-compile
-        └─► graft-cas
-              └─► graft-score
+  ├─► graft-compile
+  │     └─► graft-cas
+  │           └─► graft-score
+  └─► graft-otio ──► graft-score
 ```
 
 Adapters (OTIO, FCPXML, guests) depend on **`graft-score` only**. They
@@ -82,19 +107,20 @@ must not import adapter or crate code.
 | `graft-score` | A | Parse, validate, canonically hash the IR. Schema is normative. |
 | `graft-cas` | B + C store | Namespaced blobs + action cache. `ActionKey` ≠ `BlobId`. |
 | `graft-compile` | C | Flatten → action graph → schedule. Intra encode. Signal dirty-set. |
+| `graft-otio` | guest | Scoped OTIO export/import plus loss report. |
 | `graft` | — | CLI. Calls the crates. Does not reimplement rules. |
 
-There is no product version. Crates are unpublished `0.0.0` until a
-release is cut. Do not tag CLI or crate milestones.
+There is no product version. Crates are unpublished `0.2.0` workspace
+versions until a GitHub tag is cut. Do not publish crates.io.
 
 New encode work implements `EncodeBackend` against `Action` + CAS. New
 stores implement blobs + action cache. Nobody adds a second IR or diffs
 two mp4s.
 
-## Compile pipeline
+## Compiler subsystem
 
 ```
-score.json + scion.json
+score.json + selected scion
         │
         ▼
    1. load / validate          graft-score
@@ -126,15 +152,34 @@ Two dirty sets, do not collapse them:
 
 | Command | Input | Meaning |
 | --- | --- | --- |
-| `graft signal` | `(kind, [t0, t1), dest)` + time map | which **slots** a metric addresses |
+| `graft signal` / `graft feedback` | `(kind, declared window, build)` + that build's time map | which **slots** a metric addresses |
 | `graft dirty` / `graft compile` | action cache vs this graph | which **actions** have no artifact |
 
-`hook_rate` on `[0, 3)` dirties `hook` and the hook→body kerf. It does
-not dirty `body`. That rule lives in `ref/graft_ref/signal.py` and
-`crates/graft-compile/src/signal.rs`. Both must agree. The Python test
-`test_hook_rate_does_not_dirty_body` is load-bearing.
+`hook_rate` on the declared hook window dirties `hook` and the hook→body
+kerf. It does not dirty `body`. That rule lives in `ref/graft_ref/signal.py`
+and `crates/graft-compile/src/signal.rs`. Both must agree. The Python test
+`test_hook_rate_uses_declared_window_and_does_not_dirty_body` is load-bearing.
 
 `--prev scion.json` is a debug overlay. It is not the dirty oracle.
+
+The workspace and feedback planes wrap this pipeline:
+
+```
+tracked score + selected scion
+        │ semantic flatten/diff
+        ▼
+compiler pipeline ──► build provenance + exact time map
+                              │
+platform signal ──────────────┘
+        │ resolve addressed slots/kerfs
+        ▼
+explicit new scion and human creative change
+```
+
+Schema `0.2.0` is the workspace contract. RFC 0001 is accepted. The CLI
+preserves multiple scions, flattens layers, diffs/merges semantically,
+compiles through exact build provenance, and resolves declared windows
+against that build's time map.
 
 ## Module map
 
@@ -144,12 +189,15 @@ Mirrors `schema/`. Do not add a field here that is not in the schema.
 
 | Module | Schema / job |
 | --- | --- |
-| `score` | `score.schema.json` — clock, slots, windows, layers |
-| `scion` | `scion.schema.json` — bindings, dest, encoder fingerprint |
-| `time_map` | `time-map.schema.json` |
+| `score` | `score.schema.json` — clock, slots, windows, layer order |
+| `scion` | `scion.schema.json` — parent, layers, dest, encoder fingerprint |
+| `time` | rational rate + frame ranges |
+| `time_map` | `time-map.schema.json` keyed by build |
+| `provenance` | `build.schema.json`, `feedback.schema.json` |
+| `workspace` | inheritance, flatten, semantic diff/merge |
 | `role` | slot roles |
 | `material` | `blake3:<64 hex>` |
-| `canonical` | BLAKE3 of sorted-key JSON (millisecond seconds) |
+| `canonical` | BLAKE3 of sorted-key JSON |
 | `io` | load / save |
 | `span` | `T0-T1`, `WIDTHxHEIGHT` (`9:16` is not a dest) |
 
@@ -157,12 +205,13 @@ Mirrors `schema/`. Do not add a field here that is not in the schema.
 
 | Module | Job |
 | --- | --- |
-| `Kind` | `material` \| `slot_encode` \| `kerf` \| `concat` |
+| `Kind` | `material` \| `slot_encode` \| `audio_encode` \| `kerf` \| `concat` |
 | `BlobId` | BLAKE3 of bytes (`blake3:<hex>`) |
 | `ActionKey` | BLAKE3 of canonical action JSON (hex) |
 | `Store` | namespaced `put_blob` / `get_blob` + `get_action` / `put_action` |
 | `Memory` | tests and ephemeral device stores |
 | `Fs` | `.graft/blobs/<kind>/<aa>/<hex>` and `.graft/actions/<aa>/<hex>` |
+| `Object` | same layout on a remote root; resumable put; missing-blob discovery |
 
 Object-store backends implement `Store`. They do not change the IR.
 Local store lives at `<project>/.graft` and is gitignored.
@@ -174,7 +223,7 @@ Local store lives at `<project>/.graft` and is gitignored.
 | `flatten` | layer strength → one binding per slot |
 | `graph` | lower Score + Scion to the action DAG |
 | `schedule` | hits/misses from the action cache |
-| `keys` | `slot_encode` / `kerf` / `scion_hash` → `ActionKey` |
+| `keys` | `slot_encode` / `audio_encode` / `kerf` / `scion_hash` → `ActionKey` |
 | `grain` | frame vs GOP; whether a kerf is a no-op |
 | `encode` | `EncodeBackend` against `Action` + bytes |
 | `concat` | `ConcatBackend`; concat is a linker product |
@@ -191,15 +240,25 @@ Long-GOP uses the same graph: `FfmpegX264` shells out to system ffmpeg
 Kerf is an empty node at an IDR join; mid-GOP splice can fill that node
 later.
 
+The compiler is sequential. The ffmpeg path caches synchronized AAC
+independently and muxes it after a verified video link. `ActionResult`
+records blob, size, metadata, and provenance. Arbitrary-source mid-GOP
+repair remains later.
+
 ### `graft` CLI
 
 | Module | Job |
 | --- | --- |
 | `main` | clap surface |
-| `paths` | `score.json` / `scion.json` / `time-map.json` / `.graft/` |
+| `paths` | `score.json` / `scions/` / `feedback/` / `.graft/` |
+| `preview` | decode + composite outside the delivery cache |
 | `cmd` | one function per subcommand; no rules of its own |
 
 Flags belong in `README.md` only.
+
+The CLI creates, forks, diffs, merges, compiles, ingests feedback, iterates,
+exports/imports OTIO, previews, and syncs an object-store root. Git remains
+porcelain-light via `graft status`.
 
 ## Where to put a change
 

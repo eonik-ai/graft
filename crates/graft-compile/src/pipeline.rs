@@ -4,7 +4,9 @@ use graft_cas::{BlobId, CacheEntry, Kind, Store};
 use graft_score::{Scion, Score, TimeMap};
 
 use crate::concat::{ConcatBackend, ConcatError, ConcatPartBytes, ConcatRequest};
-use crate::encode::{EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest};
+use crate::encode::{
+    AudioEncodeRequest, EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest,
+};
 use crate::graph::{lower, ActionGraph, ConcatPart, LowerError};
 use crate::plan::{plan_from_schedule, CompilePlan};
 use crate::schedule::{schedule, CacheStatus, Schedule};
@@ -40,15 +42,14 @@ fn put_action(
     key: &graft_cas::ActionKey,
     kind: Kind,
     bytes: &[u8],
+    metadata: serde_json::Value,
+    provenance: serde_json::Value,
 ) -> Result<BlobId, CompileError> {
     let blob = store.put_blob(kind, bytes)?;
-    store.put_action(
-        key,
-        CacheEntry {
-            kind,
-            blob: blob.clone(),
-        },
-    )?;
+    let mut result = CacheEntry::new(kind, blob.clone(), bytes.len() as u64);
+    result.metadata = metadata;
+    result.provenance = provenance;
+    store.put_action(key, result)?;
     Ok(blob)
 }
 
@@ -71,7 +72,23 @@ fn execute(
                     dest: &graph.dest,
                     material: &material,
                 })?;
-                put_action(store, &scheduled.action.key, Kind::SlotEncode, &bytes)?
+                put_action(
+                    store,
+                    &scheduled.action.key,
+                    Kind::SlotEncode,
+                    &bytes,
+                    serde_json::json!({
+                        "slot": scheduled.action.slot.id,
+                        "dest": graph.dest,
+                        "source": scheduled.action.binding.source,
+                        "duration_frames": scheduled.action.slot.range.duration
+                    }),
+                    serde_json::json!({
+                        "action": "slot_encode",
+                        "material": scheduled.action.material,
+                        "encoder": graph.dest.encoder
+                    }),
+                )?
             }
         };
         slot_blobs.push(blob);
@@ -104,10 +121,54 @@ fn execute(
                         right: &right,
                     })?
                 };
-                put_action(store, &scheduled.action.key, Kind::Kerf, &bytes)?
+                put_action(
+                    store,
+                    &scheduled.action.key,
+                    Kind::Kerf,
+                    &bytes,
+                    serde_json::json!({
+                        "left": scheduled.action.left,
+                        "right": scheduled.action.right,
+                        "noop": scheduled.action.noop
+                    }),
+                    serde_json::json!({"action": "kerf"}),
+                )?
             }
         };
         kerf_blobs.push(blob);
+    }
+
+    let mut audio_blobs: Vec<BlobId> = Vec::new();
+    for scheduled in &sched.audio {
+        let blob = match &scheduled.cache {
+            CacheStatus::Hit { blob } => blob.clone(),
+            CacheStatus::Miss => {
+                let material = store.get_blob(Kind::Material, &scheduled.action.material)?;
+                let bytes = encode.encode_audio(&AudioEncodeRequest {
+                    action: &scheduled.action,
+                    dest: &graph.dest,
+                    material: &material,
+                })?;
+                put_action(
+                    store,
+                    &scheduled.action.key,
+                    Kind::AudioEncode,
+                    &bytes,
+                    serde_json::json!({
+                        "slot": scheduled.action.slot.id,
+                        "source": scheduled.action.binding.source,
+                        "codec": "aac",
+                        "sample_rate": 48000,
+                        "channels": 2
+                    }),
+                    serde_json::json!({
+                        "action": "audio_encode",
+                        "material": scheduled.action.material
+                    }),
+                )?
+            }
+        };
+        audio_blobs.push(blob);
     }
 
     match &sched.concat.cache {
@@ -139,8 +200,30 @@ fn execute(
                 action: &graph.concat,
                 dest: &graph.dest,
                 parts: &parts,
+                audio_parts: &audio_blobs
+                    .iter()
+                    .map(|blob| {
+                        store
+                            .get_blob(Kind::AudioEncode, blob)
+                            .map(|bytes| ConcatPartBytes {
+                                empty: false,
+                                bytes,
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
             })?;
-            put_action(store, &graph.concat.key, Kind::Concat, &dest_bytes)
+            put_action(
+                store,
+                &graph.concat.key,
+                Kind::Concat,
+                &dest_bytes,
+                serde_json::json!({
+                    "scion": graph.scion_id,
+                    "dest": graph.dest,
+                    "parts": graph.concat.parts.len()
+                }),
+                serde_json::json!({"action": "link_composition"}),
+            )
         }
     }
 }
@@ -150,6 +233,10 @@ pub fn materials_present(graph: &ActionGraph, store: &dyn Store) -> bool {
         .slots
         .iter()
         .all(|s| store.contains_blob(Kind::Material, &s.material))
+        && graph
+            .audio
+            .iter()
+            .all(|audio| store.contains_blob(Kind::Material, &audio.material))
 }
 
 /// Lower → schedule from the action cache → encode misses when a backend is on.

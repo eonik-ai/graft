@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use graft_cas::{ActionKey, BlobId};
-use graft_score::{Binding, Dest, Scion, Score, Slot, TimeMap};
+use graft_score::{AudioBinding, Binding, Dest, Scion, Score, Slot, TimeMap};
 
 use crate::flatten::flatten;
 use crate::grain::Grain;
-use crate::keys::{kerf_key, scion_hash, slot_encode_key};
+use crate::keys::{audio_encode_key, kerf_key, scion_hash, slot_encode_key};
 
 #[derive(Clone, Debug)]
 pub struct SlotEncodeAction {
     pub slot: Slot,
     pub binding: Binding,
+    pub key: ActionKey,
+    pub material: BlobId,
+}
+
+#[derive(Clone, Debug)]
+pub struct AudioEncodeAction {
+    pub slot: Slot,
+    pub binding: AudioBinding,
     pub key: ActionKey,
     pub material: BlobId,
 }
@@ -46,6 +54,7 @@ pub struct ActionGraph {
     pub scion_id: String,
     pub grain: Grain,
     pub slots: Vec<SlotEncodeAction>,
+    pub audio: Vec<AudioEncodeAction>,
     pub kerfs: Vec<KerfAction>,
     pub concat: ConcatAction,
     pub time_map: TimeMap,
@@ -61,10 +70,11 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
     scion
         .validate_against_score(score)
         .map_err(|e| LowerError::Invalid(e.to_string()))?;
-    let flat = flatten(score, scion);
+    let flat = flatten(score, scion).map_err(|e| LowerError::Invalid(e.to_string()))?;
     let grain = Grain::from_dest(&scion.dest);
     let spine = score.spine();
     let mut slots = Vec::new();
+    let mut audio = Vec::new();
     for slot in &spine {
         let Some(binding) = flat.bindings.get(&slot.id) else {
             continue;
@@ -77,6 +87,16 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
             key: slot_encode_key(slot, binding, &scion.dest),
             material,
         });
+        if let Some(audio_binding) = &binding.audio {
+            let audio_material = BlobId::parse(&audio_binding.material)
+                .map_err(|e| LowerError::Invalid(e.to_string()))?;
+            audio.push(AudioEncodeAction {
+                slot: (*slot).clone(),
+                binding: audio_binding.clone(),
+                key: audio_encode_key(slot, audio_binding, &scion.dest),
+                material: audio_material,
+            });
+        }
     }
 
     let mut kerfs = Vec::new();
@@ -109,16 +129,25 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
     }
 
     let slot_keys: Vec<ActionKey> = slots.iter().map(|s| s.key.clone()).collect();
+    let audio_keys: Vec<ActionKey> = audio.iter().map(|action| action.key.clone()).collect();
     let kerf_keys: Vec<ActionKey> = kerfs.iter().map(|k| k.key.clone()).collect();
-    let concat_key = scion_hash(scion, &slot_keys, &kerf_keys);
+    let concat_key = scion_hash(scion, &slot_keys, &audio_keys, &kerf_keys);
     // Dest clock; keyed on disk by concat.key (scion_hash), not mixed into schema.
-    let time_map = TimeMap::from_score(score, &scion.id, &scion.dest.id);
+    let time_map = TimeMap::from_bindings(
+        score,
+        &scion.id,
+        concat_key.hex(),
+        &scion.dest.id,
+        scion.dest.rate,
+        &flat.bindings,
+    );
 
     Ok(ActionGraph {
         dest: scion.dest.clone(),
         scion_id: scion.id.clone(),
         grain,
         slots,
+        audio,
         kerfs,
         concat: ConcatAction {
             key: concat_key,

@@ -56,11 +56,40 @@ impl std::fmt::Display for Role {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Layer {
     Base,
     Copy,
     Grade,
     Legal,
+}
+
+impl Layer {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Base => "base",
+            Self::Copy => "copy",
+            Self::Grade => "grade",
+            Self::Legal => "legal",
+        }
+    }
+
+    pub fn parse(name: &str) -> Result<Self, Error> {
+        match name {
+            "base" => Ok(Self::Base),
+            "copy" => Ok(Self::Copy),
+            "grade" => Ok(Self::Grade),
+            "legal" => Ok(Self::Legal),
+            other => Err(Error::invalid(format!("unknown layer {other:?}"))),
+        }
+    }
+}
+
+impl std::fmt::Display for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }

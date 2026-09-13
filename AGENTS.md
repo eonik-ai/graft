@@ -2,8 +2,10 @@
 
 Instructions for humans and coding agents working in this repository.
 
-graft is a spec-first compiler for video composition. The north star is
-[docs/mission.md](docs/mission.md). Non-negotiables are
+graft is a local-first composition workspace whose incremental compiler is a
+subsystem. Git owns recipe history; graft owns scions, layers, semantic
+diff/conflicts, build provenance, signal resolution, and compile lowering. The
+north star is [docs/mission.md](docs/mission.md). Non-negotiables are
 [docs/principles.md](docs/principles.md). Read both before any edit.
 
 The project name and CLI are **`graft`**, lowercase, like `git`. Do not
@@ -11,10 +13,14 @@ rename it Graft in prose, headings, or code.
 
 ## What this repo is
 
-The north star is still the schema, the worked example, and the Python
-signal → dirty-set reference. Do not import eonik GTM, lead lists, or
-"replace the editor" copy. First compiler GitHub tag is `v0.2.0` (not
-spec `v0.1.0`). crates.io stays unpublished until that tag.
+The current implementation is a local-first workspace: tracked multi-scion
+documents, layer flattening, semantic diff/merge, build provenance,
+declared-window feedback, a sequential compiler with synchronized audio on
+the ffmpeg path, a scoped OTIO adapter, local preview, and object-store
+transport. Do not claim lossless NLE round-trips, remote execution, DAM,
+review UI, or a published crates.io release. Do not import eonik GTM, lead
+lists, or "replace the editor" copy. First compiler GitHub tag is `v0.2.0`
+(not spec `v0.1.0`). crates.io stays unpublished until that tag.
 
 ## Build and test
 
@@ -35,6 +41,7 @@ ref/        Python reference for rules that can be unit-tested without ffmpeg
 crates/     graft → graft-compile → graft-cas → graft-score
              (see docs/architecture.md)
 docs/adr/   append-only decisions
+docs/rfc/   proposed contract changes; no implementation claims
 ```
 
 Dependency direction: `graft` CLI → compile → cas → score. Adapters depend
@@ -80,6 +87,7 @@ on score, never the reverse. `ref/` must not import adapter code.
 ## Invariants (fail the PR)
 
 - Three delta layers stay distinct: recipe (git), essence (CAS), build (encode cache).
+- Git owns recipe history; graft owns composition semantics. Scion inheritance is not commit history.
 - 9:16 is a **dest**, not a slot.
 - The shipped mp4 is never hashed as essence.
 - Adapters are lossy guests. No "lossless CapCut/Premiere/Resolve" claims.

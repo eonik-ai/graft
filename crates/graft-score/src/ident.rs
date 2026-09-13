@@ -23,6 +23,7 @@ pub fn require_slot_id(s: &str) -> Result<(), Error> {
     }
 }
 
+#[allow(dead_code)]
 pub fn validate_span(span: [f64; 2], what: &str) -> Result<(), Error> {
     if span[0] < 0.0 || span[1] < 0.0 {
         return Err(Error::invalid(format!("{what}: span bounds must be >= 0")));

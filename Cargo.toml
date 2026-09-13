@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 [workspace]
 resolver = "2"
-members = ["crates/graft", "crates/graft-cas", "crates/graft-compile", "crates/graft-score"]
+members = [
+    "crates/graft",
+    "crates/graft-cas",
+    "crates/graft-compile",
+    "crates/graft-otio",
+    "crates/graft-score",
+]
 default-members = ["crates/graft"]
 
 [workspace.package]
@@ -20,6 +26,7 @@ blake3 = "1"
 clap = { version = "4", features = ["derive"] }
 graft-cas = { path = "crates/graft-cas" }
 graft-compile = { path = "crates/graft-compile" }
+graft-otio = { path = "crates/graft-otio" }
 graft-score = { path = "crates/graft-score" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

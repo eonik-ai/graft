@@ -1,26 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:graft:schema:score:0.1.0",
+  "$id": "urn:graft:schema:score:0.2.0",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "graft score",
-  "description": "The recipe. Text. Git-able. Analog of a USD stage / IMF CPL.",
+  "description": "The Git-tracked semantic recipe for one concept.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["graft", "concept", "clock", "slots"],
+  "required": ["graft", "concept", "clock", "slots", "layers"],
   "properties": {
-    "graft": { "const": "0.1.0" },
+    "graft": { "const": "0.2.0" },
     "concept": {
       "type": "string",
-      "description": "UUID of the one intent. Not a file.",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
     "clock": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fps", "duration_s"],
+      "required": ["rate", "duration_frames"],
       "properties": {
-        "fps": { "type": "number", "exclusiveMinimum": 0 },
-        "duration_s": { "type": "number", "exclusiveMinimum": 0 }
+        "rate": { "$ref": "#/$defs/rate" },
+        "duration_frames": { "type": "integer", "minimum": 1 }
       }
     },
     "slots": {
@@ -30,39 +29,48 @@
     },
     "layers": {
       "type": "array",
-      "items": { "enum": ["base", "copy", "grade", "legal"] },
-      "default": ["base"]
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["base", "copy", "grade", "legal"] }
     },
     "dest_default": { "type": "string", "minLength": 1 },
-    "spill_threshold_s": { "type": "number", "minimum": 0, "default": 0.35 }
+    "spill_threshold_frames": { "type": "integer", "minimum": 0, "default": 11 }
   },
   "$defs": {
-    "role": {
-      "enum": ["hook", "body", "proof", "cta", "vo", "captions", "bed", "brand"]
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": { "type": "integer", "minimum": 1 },
+        "den": { "type": "integer", "minimum": 1 }
+      }
     },
-    "span": {
-      "type": "array",
-      "description": "[t0, t1) on the score clock, seconds.",
-      "minItems": 2,
-      "maxItems": 2,
-      "items": { "type": "number", "minimum": 0 }
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "duration": { "type": "integer", "minimum": 1 }
+      }
     },
     "slot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "role", "span"],
+      "required": ["id", "role", "range"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "role": { "$ref": "#/$defs/role" },
-        "span": { "$ref": "#/$defs/span" },
+        "role": { "enum": ["hook", "body", "proof", "cta", "vo", "captions", "bed", "brand"] },
+        "range": { "$ref": "#/$defs/range" },
         "optional": { "type": "boolean", "default": false },
         "window": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "span"],
+          "required": ["kind", "range"],
           "properties": {
             "kind": { "type": "string", "minLength": 1 },
-            "span": { "$ref": "#/$defs/span" }
+            "range": { "$ref": "#/$defs/range" }
           }
         }
       }

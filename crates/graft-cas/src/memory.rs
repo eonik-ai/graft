@@ -85,14 +85,8 @@ mod tests {
         let blob = cas.put_blob(Kind::SlotEncode, b"body-v1").unwrap();
         let key = ActionKey::from_canonical(&serde_json::json!({"role":"body"}));
         assert_ne!(key.hex(), blob.hex());
-        cas.put_action(
-            &key,
-            CacheEntry {
-                kind: Kind::SlotEncode,
-                blob: blob.clone(),
-            },
-        )
-        .unwrap();
+        cas.put_action(&key, CacheEntry::new(Kind::SlotEncode, blob.clone(), 7))
+            .unwrap();
         let hit = cas.get_action(&key).unwrap().unwrap();
         assert_eq!(hit.blob, blob);
         let other = ActionKey::from_canonical(&serde_json::json!({"role":"hook"}));

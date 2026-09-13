@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 [package]
 name = "graft"
-description = "CLI for the graft compiler"
+description = "CLI for the graft workspace and compiler"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -20,7 +20,9 @@ anyhow.workspace = true
 clap.workspace = true
 graft-cas.workspace = true
 graft-compile.workspace = true
+graft-otio.workspace = true
 graft-score.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 uuid.workspace = true

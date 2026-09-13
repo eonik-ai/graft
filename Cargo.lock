@@ -231,9 +231,11 @@ dependencies = [
  "clap",
  "graft-cas",
  "graft-compile",
+ "graft-otio",
  "graft-score",
  "serde",
  "serde_json",
+ "tempfile",
  "uuid",
 ]
 
@@ -257,6 +259,14 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "graft-otio"
+version = "0.2.0"
+dependencies = [
+ "graft-score",
+ "serde_json",
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ use crate::{Error, Result};
 pub enum Kind {
     Material,
     SlotEncode,
+    AudioEncode,
     Kerf,
     Concat,
 }
@@ -19,6 +20,7 @@ impl Kind {
         match self {
             Self::Material => "material",
             Self::SlotEncode => "slot_encode",
+            Self::AudioEncode => "audio_encode",
             Self::Kerf => "kerf",
             Self::Concat => "concat",
         }
@@ -28,6 +30,7 @@ impl Kind {
         match name {
             "material" => Ok(Self::Material),
             "slot_encode" => Ok(Self::SlotEncode),
+            "audio_encode" => Ok(Self::AudioEncode),
             "kerf" => Ok(Self::Kerf),
             "concat" => Ok(Self::Concat),
             other => Err(Error::invalid(format!("unknown blob kind {other:?}"))),

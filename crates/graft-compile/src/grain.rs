@@ -52,7 +52,7 @@ fn from_impl(impl_name: &str, keyint: u32) -> Grain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graft_score::{Dest, Encoder};
+    use graft_score::{Dest, Encoder, FrameRate};
 
     #[test]
     fn x264_is_gop_intra_is_frame() {
@@ -60,7 +60,7 @@ mod tests {
             id: "9x16".into(),
             width: 1080,
             height: 1920,
-            fps: 30.0,
+            rate: FrameRate::new(30, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
             encoder: Encoder::default_x264(),

@@ -21,7 +21,7 @@ lav hook-v2.mov 3 "color=c=0x3ED89A:s=480x854:r=30"
 "$GRAFT" init
 "$GRAFT" slot body --span 3-6
 "$GRAFT" slot cta --span 6-8 --role cta
-"$GRAFT" scion 9x16 --dest 480x854 --encoder x264
+"$GRAFT" scion create 9x16 --dest 480x854 --encoder x264
 "$GRAFT" bind hook ./hook.mov
 "$GRAFT" bind body ./body.mov
 "$GRAFT" bind cta ./cta.mov

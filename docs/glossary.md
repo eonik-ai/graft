@@ -16,12 +16,13 @@ Always lowercase **graft** for the project and the command, like **git**.
 | **dest** | Output spec: size, fps, color, encoder fingerprint. `9x16` is a dest. |
 | **scion** | A named variant: concept + bindings + dest. Example: `hook_v3 + body_v1 + cta_v1 @ 9x16`. |
 | **rootstock** | Metaphor: the concept / score the scion is grafted onto. |
-| **build** | Cached encodes + kerfs + concatenated output (mp4 or HLS). Identified by scion hash. |
+| **build** | Immutable compile identity plus cached encodes, kerfs, and concatenated output. |
 | **slot_encode** | Cache object: one slot rendered to a dest. Key in [compile.md](compile.md). |
 | **kerf** | Re-encoded join (usually one GOP each side). Named for the millimetre of wood lost at a graft union. |
 | **time map** | For one shipped build: `dest_t → slot_id`. Regenerated on retime. |
 | **dirty set** | Slots and kerfs the compiler must rebuild. |
-| **spill threshold** | Default `0.35s`. Hook-rate bleed into body below this does not dirty body. |
+| **spill threshold** | Default `11` frames. Hook-rate bleed into body below this does not dirty body. |
+| **feedback** | Raw platform metric plus resolved slots/kerfs against one build. |
 | **CAS** | Content-addressed store of materials (and, on a server, of slot_encode / kerf blobs). |
 | **adapter** | Guest import/export. Lossy by default. See [adapters.md](adapters.md). |
 | **grain** | Smallest replaceable unit: frame (intra) or GOP (Long-GOP). |

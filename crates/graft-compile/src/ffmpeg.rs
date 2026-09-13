@@ -10,7 +10,9 @@ use std::process::Command;
 use graft_score::{Dest, Encoder, RateControlMode};
 
 use crate::concat::{ConcatBackend, ConcatError, ConcatRequest};
-use crate::encode::{EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest};
+use crate::encode::{
+    AudioEncodeRequest, EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest,
+};
 use crate::grain::Grain;
 
 pub fn ffmpeg_bin() -> PathBuf {
@@ -53,6 +55,10 @@ pub struct Probe {
     pub height: u32,
     pub fps: f64,
     pub video_codec: String,
+    pub pix_fmt: String,
+    pub color_space: String,
+    pub time_base: String,
+    pub frame_count: Option<u64>,
     pub has_audio: bool,
 }
 
@@ -105,7 +111,7 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,avg_frame_rate,codec_name:format=duration",
+            "stream=width,height,avg_frame_rate,codec_name,pix_fmt,color_space,time_base,nb_frames:format=duration",
             "-of",
             "json",
             path_s,
@@ -125,6 +131,25 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
         .and_then(|c| c.as_str())
         .unwrap_or("unknown")
         .to_string();
+    let pix_fmt = stream
+        .get("pix_fmt")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let color_space = stream
+        .get("color_space")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let time_base = stream
+        .get("time_base")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let frame_count = stream
+        .get("nb_frames")
+        .and_then(|value| value.as_str())
+        .and_then(|value| value.parse().ok());
     let fps = parse_rate(
         stream
             .get("avg_frame_rate")
@@ -161,6 +186,10 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
         height,
         fps,
         video_codec: codec,
+        pix_fmt,
+        color_space,
+        time_base,
+        frame_count,
         has_audio,
     })
 }
@@ -207,6 +236,28 @@ impl FfmpegX264 {
     pub fn available() -> bool {
         Self::from_env().is_ok()
     }
+
+    pub fn runtime_toolchain() -> Result<serde_json::Value, EncodeError> {
+        let ffmpeg = ffmpeg_bin();
+        let ffprobe = ffprobe_bin();
+        let version =
+            run_ok(&ffmpeg, &["-hide_banner", "-version"]).map_err(EncodeError::Invalid)?;
+        let encoder = run_ok(&ffmpeg, &["-hide_banner", "-h", "encoder=libx264"])
+            .map_err(EncodeError::Invalid)?;
+        let mut identity = version.clone();
+        identity.extend_from_slice(&encoder);
+        Ok(serde_json::json!({
+            "contract": "ffmpeg-libx264-closed-gop-v1",
+            "ffmpeg": ffmpeg,
+            "ffprobe": ffprobe,
+            "build_digest": graft_score::material_id(&identity),
+            "threads": 1,
+            "open_gop": false,
+            "stitchable": true,
+            "vf": "scale=bicubic,fps=dest.rate",
+            "audio": "independent-aac-v1"
+        }))
+    }
 }
 
 fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
@@ -222,7 +273,7 @@ fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
         .and_then(|r| r.crf)
         .unwrap_or(18.0);
     let params = format!(
-        "keyint={}:min-keyint={}:scenecut=0:threads=1:sliced-threads=0:sync-lookahead=0",
+        "keyint={}:min-keyint={}:scenecut=0:open-gop=0:stitchable=1:threads=1:sliced-threads=0:sync-lookahead=0",
         enc.keyint, enc.keyint
     );
     Ok(vec![
@@ -242,7 +293,9 @@ fn x264_args(enc: &Encoder, dest: &Dest) -> Result<Vec<String>, EncodeError> {
         "-vf".into(),
         format!(
             "scale={}:{}:flags=bicubic,fps={}",
-            dest.width, dest.height, dest.fps
+            dest.width,
+            dest.height,
+            dest.rate.as_f64()
         ),
         "-movflags".into(),
         "+faststart".into(),
@@ -271,9 +324,9 @@ impl EncodeBackend for FfmpegX264 {
             "error".into(),
             "-y".into(),
             "-ss".into(),
-            format!("{:.3}", req.action.binding.in_s),
+            format!("{:.3}", req.action.binding.in_s()),
             "-to".into(),
-            format!("{:.3}", req.action.binding.out_s),
+            format!("{:.3}", req.action.binding.out_s()),
             "-i".into(),
             input.to_string_lossy().into_owned(),
         ];
@@ -281,6 +334,38 @@ impl EncodeBackend for FfmpegX264 {
         args.push(output.to_string_lossy().into_owned());
         let str_args: Vec<&str> = args.iter().map(String::as_str).collect();
         run_ok(&self.ffmpeg, &str_args).map_err(EncodeError::Invalid)?;
+        fs::read(&output).map_err(|e| EncodeError::Invalid(e.to_string()))
+    }
+
+    fn encode_audio(&self, req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
+        let dir = tempfile::tempdir().map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        let input = dir.path().join("material.bin");
+        let output = dir.path().join("audio.m4a");
+        fs::write(&input, req.material).map_err(|e| EncodeError::Invalid(e.to_string()))?;
+        let args = [
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "error".to_string(),
+            "-y".to_string(),
+            "-ss".to_string(),
+            format!("{:.6}", req.action.binding.source.start_seconds()),
+            "-to".to_string(),
+            format!("{:.6}", req.action.binding.source.end_seconds()),
+            "-i".to_string(),
+            input.to_string_lossy().into_owned(),
+            "-vn".to_string(),
+            "-c:a".to_string(),
+            "aac".to_string(),
+            "-ar".to_string(),
+            "48000".to_string(),
+            "-ac".to_string(),
+            "2".to_string(),
+            "-b:a".to_string(),
+            "192k".to_string(),
+            output.to_string_lossy().into_owned(),
+        ];
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        run_ok(&self.ffmpeg, &refs).map_err(EncodeError::Invalid)?;
         fs::read(&output).map_err(|e| EncodeError::Invalid(e.to_string()))
     }
 
@@ -302,10 +387,38 @@ impl ConcatBackend for FfmpegX264 {
         let dir = tempfile::tempdir().map_err(|e| ConcatError::Invalid(e.to_string()))?;
         let mut list = String::new();
         let mut n = 0u32;
+        let mut baseline: Option<Probe> = None;
+        let mut expected_duration = 0.0;
         for part in req.parts {
             if part.empty || part.bytes.is_empty() {
                 continue;
             }
+            let probe = probe_media(&part.bytes)
+                .map_err(|e| ConcatError::Invalid(format!("probe concat part: {e}")))?;
+            if probe.width != req.dest.width
+                || probe.height != req.dest.height
+                || (probe.fps - req.dest.rate.as_f64()).abs() > 0.001
+                || probe.pix_fmt != req.dest.pix_fmt
+                || probe.video_codec != "h264"
+            {
+                return Err(ConcatError::Invalid(format!(
+                    "incompatible concat part: {}x{} {}fps {} {}",
+                    probe.width, probe.height, probe.fps, probe.video_codec, probe.pix_fmt
+                )));
+            }
+            if let Some(first) = &baseline {
+                if first.time_base != probe.time_base
+                    || first.pix_fmt != probe.pix_fmt
+                    || first.color_space != probe.color_space
+                {
+                    return Err(ConcatError::Invalid(
+                        "concat parts disagree on time base, pixel format, or color".into(),
+                    ));
+                }
+            } else {
+                baseline = Some(probe.clone());
+            }
+            expected_duration += probe.duration_s;
             let p = dir.path().join(format!("p{n}.mp4"));
             fs::write(&p, &part.bytes).map_err(|e| ConcatError::Invalid(e.to_string()))?;
             let path = p
@@ -345,8 +458,125 @@ impl ConcatBackend for FfmpegX264 {
             ],
         )
         .map_err(ConcatError::Invalid)?;
-        fs::read(&out).map_err(|e| ConcatError::Invalid(e.to_string()))
+        let bytes = fs::read(&out).map_err(|e| ConcatError::Invalid(e.to_string()))?;
+        let has_audio = req
+            .audio_parts
+            .iter()
+            .any(|part| !part.empty && !part.bytes.is_empty());
+        let muxed = if has_audio {
+            mux_audio(&self.ffmpeg, dir.path(), &out, req.audio_parts)?
+        } else {
+            bytes
+        };
+        let linked = probe_media(&muxed)
+            .map_err(|e| ConcatError::Invalid(format!("verify linked output: {e}")))?;
+        let tolerance = 1.5 / req.dest.rate.as_f64();
+        if (linked.duration_s - expected_duration).abs() > tolerance {
+            return Err(ConcatError::Invalid(format!(
+                "linked duration {:.3}s differs from parts {:.3}s",
+                linked.duration_s, expected_duration
+            )));
+        }
+        if linked.width != req.dest.width
+            || linked.height != req.dest.height
+            || linked.video_codec != "h264"
+            || linked.pix_fmt != req.dest.pix_fmt
+        {
+            return Err(ConcatError::Invalid(format!(
+                "linked stream layout {}x{} {} {} is incompatible with dest",
+                linked.width, linked.height, linked.video_codec, linked.pix_fmt
+            )));
+        }
+        if let Some(frames) = linked.frame_count {
+            let expected_frames = (expected_duration * req.dest.rate.as_f64()).round() as u64;
+            if frames.abs_diff(expected_frames) > 2 {
+                return Err(ConcatError::Invalid(format!(
+                    "linked frame count {frames} differs from parts {expected_frames}"
+                )));
+            }
+        }
+        if has_audio && !linked.has_audio {
+            return Err(ConcatError::Invalid(
+                "linked output is missing synchronized audio".into(),
+            ));
+        }
+        Ok(muxed)
     }
+}
+
+fn mux_audio(
+    ffmpeg: &Path,
+    dir: &Path,
+    video: &Path,
+    audio_parts: &[crate::concat::ConcatPartBytes],
+) -> Result<Vec<u8>, ConcatError> {
+    let mut list = String::new();
+    for (i, part) in audio_parts.iter().enumerate() {
+        if part.empty || part.bytes.is_empty() {
+            continue;
+        }
+        let path = dir.join(format!("a{i}.m4a"));
+        fs::write(&path, &part.bytes).map_err(|e| ConcatError::Invalid(e.to_string()))?;
+        let path = path
+            .to_str()
+            .ok_or_else(|| ConcatError::Invalid("audio concat path".into()))?
+            .replace('\\', "/")
+            .replace('\'', r"'\''");
+        list.push_str(&format!("file '{path}'\n"));
+    }
+    if list.is_empty() {
+        return fs::read(video).map_err(|e| ConcatError::Invalid(e.to_string()));
+    }
+    let list_path = dir.join("audio.txt");
+    fs::write(&list_path, list).map_err(|e| ConcatError::Invalid(e.to_string()))?;
+    let audio = dir.join("audio.m4a");
+    let list_s = list_path.to_string_lossy().into_owned();
+    let audio_s = audio.to_string_lossy().into_owned();
+    run_ok(
+        ffmpeg,
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            &list_s,
+            "-c",
+            "copy",
+            &audio_s,
+        ],
+    )
+    .map_err(ConcatError::Invalid)?;
+    let muxed = dir.join("muxed.mp4");
+    let video_s = video.to_string_lossy().into_owned();
+    let muxed_s = muxed.to_string_lossy().into_owned();
+    run_ok(
+        ffmpeg,
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            &video_s,
+            "-i",
+            &audio_s,
+            "-c:v",
+            "copy",
+            "-c:a",
+            "copy",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            &muxed_s,
+        ],
+    )
+    .map_err(ConcatError::Invalid)?;
+    fs::read(&muxed).map_err(|e| ConcatError::Invalid(e.to_string()))
 }
 
 #[cfg(test)]
@@ -355,7 +585,8 @@ mod tests {
     use crate::pipeline::compile;
     use graft_cas::{Kind, Memory, Store};
     use graft_score::{
-        Binding, Clock, Dest, Encoder, Layer, Role, Scion, Score, Slot, Window, GRAFT_SCHEMA,
+        Binding, BindingLayer, Clock, Dest, Encoder, FrameRange, FrameRate, Layer, Role, Scion,
+        Score, Slot, TimedRange, Window, GRAFT_SCHEMA,
     };
     use std::collections::BTreeMap;
 
@@ -393,38 +624,38 @@ mod tests {
             graft: GRAFT_SCHEMA.into(),
             concept: "11111111-1111-4111-8111-111111111111".into(),
             clock: Clock {
-                fps: 10.0,
-                duration_s: 4.0,
+                rate: FrameRate::new(10, 1),
+                duration_frames: 40,
             },
             slots: vec![
                 Slot {
                     id: "hook".into(),
                     role: Role::Hook,
-                    span: [0.0, 1.0],
+                    range: FrameRange::new(0, 10),
                     optional: false,
                     window: Some(Window {
                         kind: "hook_rate".into(),
-                        span: [0.0, 1.0],
+                        range: FrameRange::new(0, 10),
                     }),
                 },
                 Slot {
                     id: "body".into(),
                     role: Role::Body,
-                    span: [1.0, 3.0],
+                    range: FrameRange::new(10, 20),
                     optional: false,
                     window: None,
                 },
                 Slot {
                     id: "cta".into(),
                     role: Role::Cta,
-                    span: [3.0, 4.0],
+                    range: FrameRange::new(30, 10),
                     optional: false,
                     window: None,
                 },
             ],
             layers: vec![Layer::Base],
             dest_default: Some("9x16".into()),
-            spill_threshold_s: 0.35,
+            spill_threshold_frames: 4,
         }
     }
 
@@ -435,7 +666,7 @@ mod tests {
             id: "9x16".into(),
             width: 64,
             height: 64,
-            fps: 10.0,
+            rate: FrameRate::new(10, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
             encoder: enc,
@@ -445,9 +676,9 @@ mod tests {
     fn bind(material: &str, in_s: f64, out_s: f64) -> Binding {
         Binding {
             material: material.into(),
-            in_s,
-            out_s,
+            source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: None,
+            audio: None,
         }
     }
 
@@ -482,8 +713,13 @@ mod tests {
                 graft: GRAFT_SCHEMA.into(),
                 id: "9x16".into(),
                 concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
                 dest: dest.clone(),
-                bindings,
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
             }
         };
 

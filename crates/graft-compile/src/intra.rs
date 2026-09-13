@@ -6,7 +6,9 @@
 use graft_score::Dest;
 
 use crate::concat::{ConcatBackend, ConcatError, ConcatRequest};
-use crate::encode::{EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest};
+use crate::encode::{
+    AudioEncodeRequest, EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest,
+};
 use crate::grain::Grain;
 
 pub const MAGIC: &[u8; 4] = b"GFI1";
@@ -195,7 +197,7 @@ impl EncodeBackend for FrameIntra {
                 seq.width, seq.height, req.dest.width, req.dest.height
             )));
         }
-        let sliced = seq.slice_seconds(req.action.binding.in_s, req.action.binding.out_s)?;
+        let sliced = seq.slice_seconds(req.action.binding.in_s(), req.action.binding.out_s())?;
         Ok(sliced.encode())
     }
 
@@ -206,6 +208,12 @@ impl EncodeBackend for FrameIntra {
         }
         Err(EncodeError::Invalid(
             "FrameIntra kerf is a no-op; Long-GOP is a later backend".into(),
+        ))
+    }
+
+    fn encode_audio(&self, _req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
+        Err(EncodeError::Invalid(
+            "graft-intra does not carry audio; use x264/ffmpeg".into(),
         ))
     }
 }
@@ -235,7 +243,8 @@ mod tests {
     use crate::pipeline::compile;
     use graft_cas::{Kind, Memory, Store};
     use graft_score::{
-        Binding, Clock, Dest, Encoder, Layer, Role, Scion, Score, Slot, Window, GRAFT_SCHEMA,
+        Binding, BindingLayer, Clock, Dest, Encoder, FrameRange, FrameRate, Layer, Role, Scion,
+        Score, Slot, TimedRange, Window, GRAFT_SCHEMA,
     };
     use std::collections::BTreeMap;
 
@@ -260,38 +269,38 @@ mod tests {
             graft: GRAFT_SCHEMA.into(),
             concept: "11111111-1111-4111-8111-111111111111".into(),
             clock: Clock {
-                fps: 10.0,
-                duration_s: 4.0,
+                rate: FrameRate::new(10, 1),
+                duration_frames: 40,
             },
             slots: vec![
                 Slot {
                     id: "hook".into(),
                     role: Role::Hook,
-                    span: [0.0, 1.0],
+                    range: FrameRange::new(0, 10),
                     optional: false,
                     window: Some(Window {
                         kind: "hook_rate".into(),
-                        span: [0.0, 1.0],
+                        range: FrameRange::new(0, 10),
                     }),
                 },
                 Slot {
                     id: "body".into(),
                     role: Role::Body,
-                    span: [1.0, 3.0],
+                    range: FrameRange::new(10, 20),
                     optional: false,
                     window: None,
                 },
                 Slot {
                     id: "cta".into(),
                     role: Role::Cta,
-                    span: [3.0, 4.0],
+                    range: FrameRange::new(30, 10),
                     optional: false,
                     window: None,
                 },
             ],
             layers: vec![Layer::Base],
             dest_default: Some("9x16".into()),
-            spill_threshold_s: 0.35,
+            spill_threshold_frames: 4,
         }
     }
 
@@ -300,7 +309,7 @@ mod tests {
             id: "9x16".into(),
             width: 4,
             height: 4,
-            fps: 10.0,
+            rate: FrameRate::new(10, 1),
             pix_fmt: "rgb24".into(),
             color: "srgb".into(),
             encoder: Encoder::graft_intra(),
@@ -310,9 +319,9 @@ mod tests {
     fn bind(material: &str, in_s: f64, out_s: f64) -> Binding {
         Binding {
             material: material.into(),
-            in_s,
-            out_s,
+            source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: None,
+            audio: None,
         }
     }
 
@@ -346,8 +355,13 @@ mod tests {
                 graft: GRAFT_SCHEMA.into(),
                 id: "9x16".into(),
                 concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
                 dest: dest.clone(),
-                bindings,
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
             }
         };
 

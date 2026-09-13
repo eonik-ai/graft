@@ -75,9 +75,31 @@ impl std::fmt::Display for ActionKey {
     }
 }
 
-/// Action cache value: which namespaced blob this action produced.
+/// Durable result metadata for one reproducible action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CacheEntry {
+pub struct ActionResult {
     pub kind: Kind,
     pub blob: BlobId,
+    pub size: u64,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub logs: Vec<String>,
+    #[serde(default)]
+    pub provenance: serde_json::Value,
 }
+
+impl ActionResult {
+    pub fn new(kind: Kind, blob: BlobId, size: u64) -> Self {
+        Self {
+            kind,
+            blob,
+            size,
+            metadata: serde_json::Value::Null,
+            logs: Vec::new(),
+            provenance: serde_json::Value::Null,
+        }
+    }
+}
+
+pub type CacheEntry = ActionResult;

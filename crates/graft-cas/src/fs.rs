@@ -112,14 +112,8 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(cas.get_blob(Kind::Material, &a).unwrap(), b"body-v1");
         let key = ActionKey::from_canonical(&serde_json::json!({"k":1}));
-        cas.put_action(
-            &key,
-            CacheEntry {
-                kind: Kind::SlotEncode,
-                blob: a.clone(),
-            },
-        )
-        .unwrap();
+        cas.put_action(&key, CacheEntry::new(Kind::SlotEncode, a.clone(), 7))
+            .unwrap();
         assert_eq!(cas.get_action(&key).unwrap().unwrap().blob, a);
         assert!(cas
             .get_action(&ActionKey::from_canonical(&serde_json::json!({"k":2})))

@@ -27,13 +27,16 @@ Concat output is a linker product. Store it as kind `concat` if at all.
 
 ```
 slot_encode := H(
-  slot.role | material.hash | in_s | out_s | params | dest | encoder
+  slot.id | slot.role | material.hash | source | audio | params | dest | encoder
 )
 ```
 
-`dest` = `{width, height, fps, pix_fmt, color}`.
+`dest` = `{width, height, rate, pix_fmt, color}`.
 
-`encoder` = `{impl, version, profile, level, rate_control, preset, keyint, sc_threshold}`.
+`encoder` includes impl, version, profile, level, rate_control, preset,
+keyint, `sc_threshold`, and toolchain (ffmpeg/libx264 digest, threads,
+closed-GOP contract). Slot id is part of the key so distinct semantic
+slots cannot share an action identity.
 
 `sc_threshold` is **0** and `keyint` is **fixed** so GOP layout is
 deterministic across machines.
@@ -54,15 +57,19 @@ a node).
 ### scion hash
 
 ```
-scion_hash := H( ordered slot_encode[] | kerf[] | dest )
+scion_hash := H( ordered slot_encode[] | audio_encode[] | kerf[] | dest )
 ```
+
+`audio_encode` is independent: slot id, material, source, AAC 48kHz stereo,
+and encoder toolchain. Video-only scions omit it.
 
 The time map is a **build artifact** keyed by `scion_hash` (dest clock).
 It is not an identity derived only for the CLI.
 
 ## Dirty set
 
-The dirty oracle is the **action cache**: `ActionKey → { kind, blob }`.
+The dirty oracle is the **action cache**:
+`ActionKey → ActionResult { kind, blob, size, metadata, logs, provenance }`.
 A miss is an absent key, or a key whose blob is missing from the
 namespaced CAS.
 
@@ -97,11 +104,13 @@ kerf is empty; concat splices.
 
 Long-GOP (`impl: x264`): graft shells out to **system** ffmpeg/`libx264`
 with `keyint` = `min-keyint`, `scenecut=0`, `threads=1`. Each slot
-encode is a closed-GOP mp4 starting on IDR. Concat is `ffmpeg -c copy`.
+encode is a closed-GOP mp4 starting on IDR. Concat is `ffmpeg -c copy`
+after probing parts for size, fps, codec, pix_fmt, color, and time base.
 The hook→body kerf node still misses when the hook key changes; its
 artifact is empty at an IDR-aligned join. Body `BlobId` is unchanged
 across a hook swap. Mid-GOP splice (re-encode straddling GOPs from one
-long timeline encode) is the same node, later.
+long timeline encode) is the same node, later. Synchronized AAC audio
+is cached independently and muxed after the video link.
 
 Do not statically link x264 into the Apache-2.0 binary.
 

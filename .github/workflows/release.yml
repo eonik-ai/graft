@@ -57,4 +57,4 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Compiler release. Needs ffmpeg on PATH. Schema format id is still 0.1.0. crates.io is not published."
+            --notes "First workspace/compiler tag. Schema format id is 0.2.0. Needs ffmpeg on PATH. crates.io is not published (\`publish = false\`)."

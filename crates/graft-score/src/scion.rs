@@ -8,7 +8,9 @@ use serde_json::Value;
 use crate::canonical::require_graft_version;
 use crate::ident::{require_slot_id, require_uuid};
 use crate::material::require_material;
+use crate::role::Layer;
 use crate::score::Score;
+use crate::time::{FrameRate, TimedRange};
 use crate::Error;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -44,6 +46,8 @@ pub struct Encoder {
     pub preset: Option<String>,
     pub keyint: u32,
     pub sc_threshold: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolchain: Option<Value>,
 }
 
 impl Encoder {
@@ -62,6 +66,12 @@ impl Encoder {
             preset: Some("medium".into()),
             keyint: 30,
             sc_threshold: 0,
+            toolchain: Some(serde_json::json!({
+                "contract": "ffmpeg-libx264-closed-gop-v1",
+                "threads": 1,
+                "open_gop": false,
+                "stitchable": true
+            })),
         }
     }
 
@@ -76,6 +86,9 @@ impl Encoder {
             preset: None,
             keyint: 1,
             sc_threshold: 0,
+            toolchain: Some(serde_json::json!({
+                "contract": "graft-intra-v1"
+            })),
         }
     }
 
@@ -109,7 +122,7 @@ pub struct Dest {
     pub id: String,
     pub width: u32,
     pub height: u32,
-    pub fps: f64,
+    pub rate: FrameRate,
     pub pix_fmt: String,
     pub color: String,
     pub encoder: Encoder,
@@ -128,9 +141,7 @@ impl Dest {
         if self.width < 1 || self.height < 1 {
             return Err(Error::invalid("dest width/height must be >= 1"));
         }
-        if self.fps <= 0.0 || !self.fps.is_finite() {
-            return Err(Error::invalid("dest.fps must be > 0"));
-        }
+        self.rate.validate("dest.rate")?;
         if self.pix_fmt.is_empty() || self.color.is_empty() {
             return Err(Error::invalid("dest pix_fmt and color are required"));
         }
@@ -141,7 +152,7 @@ impl Dest {
         serde_json::json!({
             "width": self.width,
             "height": self.height,
-            "fps": self.fps,
+            "rate": self.rate,
             "pix_fmt": self.pix_fmt,
             "color": self.color,
         })
@@ -156,27 +167,55 @@ impl Dest {
 #[serde(deny_unknown_fields)]
 pub struct Binding {
     pub material: String,
-    pub in_s: f64,
-    pub out_s: f64,
+    pub source: TimedRange,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioBinding>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AudioBinding {
+    pub material: String,
+    pub source: TimedRange,
 }
 
 impl Binding {
+    pub fn in_s(&self) -> f64 {
+        self.source.start_seconds()
+    }
+
+    pub fn out_s(&self) -> f64 {
+        self.source.end_seconds()
+    }
+
     pub fn validate(&self, slot_id: &str) -> Result<(), Error> {
         require_material(&self.material)?;
-        if self.in_s < 0.0 || self.out_s < 0.0 {
-            return Err(Error::invalid(format!(
-                "binding {slot_id}: in_s/out_s must be >= 0"
-            )));
-        }
-        if self.out_s <= self.in_s {
-            return Err(Error::invalid(format!(
-                "binding {slot_id}: out_s must be greater than in_s"
-            )));
+        self.source.validate(&format!("binding {slot_id}.source"))?;
+        if let Some(audio) = &self.audio {
+            require_material(&audio.material)?;
+            audio
+                .source
+                .validate(&format!("binding {slot_id}.audio.source"))?;
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BindingLayer {
+    pub name: Layer,
+    #[serde(default)]
+    pub bindings: BTreeMap<String, Binding>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChangeRequest {
+    pub feedback: String,
+    pub slots: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -185,11 +224,33 @@ pub struct Scion {
     pub graft: String,
     pub id: String,
     pub concept: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_request: Option<ChangeRequest>,
     pub dest: Dest,
-    pub bindings: BTreeMap<String, Binding>,
+    pub layers: Vec<BindingLayer>,
 }
 
 impl Scion {
+    pub fn layer(&self, name: Layer) -> Option<&BindingLayer> {
+        self.layers.iter().find(|layer| layer.name == name)
+    }
+
+    pub fn layer_mut(&mut self, name: Layer) -> Option<&mut BindingLayer> {
+        self.layers.iter_mut().find(|layer| layer.name == name)
+    }
+
+    pub fn ensure_layer(&mut self, name: Layer) -> &mut BindingLayer {
+        if self.layer(name).is_none() {
+            self.layers.push(BindingLayer {
+                name,
+                bindings: BTreeMap::new(),
+            });
+        }
+        self.layer_mut(name).expect("layer was inserted")
+    }
+
     pub fn validate(&self) -> Result<(), Error> {
         require_graft_version(&self.graft)?;
         if self.id.is_empty() {
@@ -200,9 +261,31 @@ impl Scion {
         }
         require_uuid(&self.concept, "concept")?;
         self.dest.validate()?;
-        for (slot_id, binding) in &self.bindings {
-            require_slot_id(slot_id)?;
-            binding.validate(slot_id)?;
+        if self.layers.is_empty() && self.parent.is_none() {
+            return Err(Error::invalid("root scion must have at least one layer"));
+        }
+        if let Some(request) = &self.change_request {
+            if request.feedback.is_empty() || request.slots.is_empty() {
+                return Err(Error::invalid(
+                    "change_request feedback and slots must be non-empty",
+                ));
+            }
+            for slot in &request.slots {
+                require_slot_id(slot)?;
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for layer in &self.layers {
+            if !seen.insert(layer.name) {
+                return Err(Error::invalid(format!(
+                    "duplicate scion layer {}",
+                    layer.name
+                )));
+            }
+            for (slot_id, binding) in &layer.bindings {
+                require_slot_id(slot_id)?;
+                binding.validate(slot_id)?;
+            }
         }
         Ok(())
     }
@@ -213,21 +296,56 @@ impl Scion {
             return Err(Error::invalid("scion.concept != score.concept"));
         }
         let slot_ids: Vec<&str> = score.slots.iter().map(|s| s.id.as_str()).collect();
-        for key in self.bindings.keys() {
-            if !slot_ids.iter().any(|id| *id == key) {
-                return Err(Error::invalid(format!("scion binds unknown slot {key}")));
-            }
-        }
-        for slot in &score.slots {
-            if !slot.optional && !self.bindings.contains_key(&slot.id) {
+        for layer in &self.layers {
+            if !score.layers.contains(&layer.name) {
                 return Err(Error::invalid(format!(
-                    "required slot {} is unbound",
-                    slot.id
+                    "scion layer {} is not declared by score.layers",
+                    layer.name
                 )));
+            }
+            for (key, binding) in &layer.bindings {
+                if !slot_ids.iter().any(|id| *id == key) {
+                    return Err(Error::invalid(format!("scion binds unknown slot {key}")));
+                }
+                let slot = score.slot(key).expect("slot id checked");
+                binding_duration_compatible(slot, binding, &self.dest.rate)?;
             }
         }
         Ok(())
     }
+}
+
+fn binding_duration_compatible(
+    slot: &crate::score::Slot,
+    binding: &Binding,
+    dest_rate: &FrameRate,
+) -> Result<(), Error> {
+    let speed = binding
+        .params
+        .as_ref()
+        .and_then(|value| value.get("speed"))
+        .and_then(|value| value.as_f64())
+        .unwrap_or(1.0);
+    if speed <= 0.0 || !speed.is_finite() {
+        return Err(Error::invalid(format!(
+            "binding {} speed must be finite and > 0",
+            slot.id
+        )));
+    }
+    let source_s = binding
+        .source
+        .rate
+        .seconds_from_frames(binding.source.range.duration as i64);
+    let dest_s = dest_rate.seconds_from_frames(slot.range.duration as i64);
+    let expected = source_s / speed;
+    let tolerance = dest_rate.seconds_from_frames(1);
+    if (expected - dest_s).abs() > tolerance {
+        return Err(Error::invalid(format!(
+            "binding {} source duration {:.3}s at speed {speed} does not match slot {:.3}s",
+            slot.id, source_s, dest_s
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -240,7 +358,7 @@ mod tests {
             id: "9:16".into(),
             width: 1080,
             height: 1920,
-            fps: 30.0,
+            rate: FrameRate::new(30, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
             encoder: Encoder::default_x264(),

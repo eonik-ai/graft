@@ -9,11 +9,13 @@ mod fs;
 mod id;
 mod kind;
 mod memory;
+mod object;
 
 pub use fs::Fs;
-pub use id::{ActionKey, BlobId, CacheEntry};
+pub use id::{ActionKey, ActionResult, BlobId, CacheEntry};
 pub use kind::Kind;
 pub use memory::Memory;
+pub use object::Object;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

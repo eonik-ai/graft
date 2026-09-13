@@ -1,7 +1,22 @@
 <div align="center">
-  <a href="https://github.com/eonik-ai/graft"><img src="docs/brand/mark.png" alt="两段素材，一处接合。" width="120" /></a>
+  <a href="https://github.com/eonik-ai/graft">
+    <img src="docs/brand/mark.png" alt="两段素材，一处接合。" width="120" />
+  </a>
   <h1>graft</h1>
   <p><strong>换掉 hook，保留 body。</strong></p>
+  <p>本地优先的构图工作区。增量编译器是它的构建引擎。</p>
+  <p>
+    <a href="#开始使用">开始使用</a> ·
+    <a href="docs/mission.md">Mission</a> ·
+    <a href="schema/">Schema</a> ·
+    <a href="docs/roadmap.md">Roadmap</a>
+  </p>
+  <p>
+    <a href="https://github.com/eonik-ai/graft/actions/workflows/ci.yml"><img src="https://github.com/eonik-ai/graft/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-18181B?style=flat-square" alt="Apache-2.0 license" /></a>
+    <img src="https://img.shields.io/badge/Rust-1.85%2B-B7410E?style=flat-square" alt="Rust 1.85+" />
+    <img src="https://img.shields.io/badge/runtime-ffmpeg-007808?style=flat-square" alt="ffmpeg runtime" />
+  </p>
   <p>
     <a href="README.md">English</a> ·
     <a href="README.es.md">Español</a> ·
@@ -18,139 +33,126 @@
 ---
 
 score 是源。essence 不可变。mp4 是一次编译。
-换一段 hook，body 留下。
 
-git 版本化 **score**（JSON）。CAS 版本化 essence。action cache 版本化编码结果，因此更换 hook 时 body 走 bitstream copy。graft 不是 NLE。运行时需要 `PATH` 上的 **ffmpeg** 和 **ffprobe**。
+奠基循环是 concept → scions → 团队迭代 → 已交付 build → signal → 被寻址的
+slot → 新 scion。Git 拥有配方历史；graft 拥有构图语义与编译；CAS 存放不可变
+源素材；action cache 保存派生 encode。
+
+换一段 hook 再编译：`graft` 编码 hook，bitstream 拷贝 body，并链接新 dest。
+针对该精确 build 的平台 signal 会点名 hook，而无需重切整棵树。
 
 ![graft CLI 编译、重新绑定 hook，并保持 body 与 cta 干净](docs/assets/landing.gif)
 
 _真实的本地会话，由 [asciinema](https://github.com/asciinema/asciinema) 录制。
 回放源文件是 [`landing.cast`](docs/assets/landing.cast)。_
 
+## 今天 graft 能做什么
+
+- 用 Git 跟踪的配方保存一个 concept 和多个继承 scion
+- 按 scion 与 layer 做 bind；展平最强 layer 的意见
+- 显示语义 diff 与三方 merge，不合并媒体
+- 把名为 `hook`、`body`、`proof`、`cta` 的 slot 编译到 dest
+- 独立缓存同步 AAC，并与视频链路 mux
+- 重编码变更的 hook，同时 bitstream 拷贝未变的 body
+- 通过声明窗口与已交付 time map 解析 `hook_rate`
+- 导出/导入有范围的 OTIO 子集，并给出损失报告
+- 通过 decode 与 composite 预览所选 scion
+- 用缺失 blob 发现把 blob 同步到 object-store 根目录
+
+## 它做不到什么
+
+graft 不应用 speed/retime，不修复任意 mid-GOP 源，也不把 NLE 的 effects、
+grades、generators 无损往返。它不是像素上的 Git、Git 历史的替代、锁服务器、
+DAM 或审片工具。
+
+顺序编译器、action graph、文件系统 CAS、object-store 传输、帧粒度后端以及
+系统 ffmpeg/x264 路径都在仓库里。
+Schema 的 format id `0.2.0` 不是 crate 版本。
+第一个编译器/工作区 GitHub 标签是 `v0.2.0`；不要复用 spec 标签 `v0.1.0`。
+破坏性 schema 变更需要 RFC。
+
 ## 开始使用
 
-### 要求
-
-graft 调用系统里的 ffmpeg，不链接 GPL 的 x264。需要 Rust 1.85+（`rustup`）。
-`$FFMPEG` / `$FFPROBE` 可覆盖 `PATH` 上的二进制。
-
-### 安装
+运行时：`PATH` 上的 **ffmpeg** 和 **ffprobe**（或 `$FFMPEG` / `$FFPROBE`）。
+graft 调用系统程序，不链接 GPL 的 x264。需要 Rust 1.85+（`rustup`）。
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
 graft --help
 ```
 
-GitHub Release 二进制（在切 `v0.2.*` 标签之后）：macOS arm64 与 Linux x64。
+切出 `v0.2.*` 标签后会有 GitHub Release 二进制：macOS arm64 与 Linux x64。
 crates.io 尚未发布（`publish = false`）。
 
-从克隆安装：
+从克隆开始：
 
 ```sh
 git clone https://github.com/eonik-ai/graft.git
 cd graft
 make test
-cargo run -- -C examples/hook-v3-body-v1-9x16 signal --kind hook_rate --t 0-3
 ```
 
-仓库里的工作示例只有 JSON（占位哈希，git 中没有媒体）。
-在那里运行 `graft compile` 只会打印一份 **plan**。你自己的素材才会编译成 mp4。
-
-### 运行第一次编译
+第一次编译：
 
 ```sh
 mkdir ad && cd ad
 graft init
 graft slot body --span 3-20
 graft slot cta --span 20-23 --role cta
-graft scion 9x16 --dest 1080x1920 --encoder x264
+graft scion create 9x16 --dest 1080x1920 --encoder x264
 graft bind hook ./hook.mov
 graft bind body ./body.mov
 graft bind cta ./cta.mov
 graft compile --out ad.mp4
 ```
 
-播放 `ad.mp4`。重新 bind hook 再编译一次：`graft dirty` 会显示 `body` **hit**。
-body 的编码结果按 bitstream copy。dest 是链接产物，永远不是 essence。
+播放 `ad.mp4`。fork 一个 hook scion 并 bind 另一条素材：
 
 ```sh
-graft signal --kind hook_rate --t 0-3
+graft scion fork 9x16 hook-v2
+graft bind hook ./hook-v2.mov --scion hook-v2
+graft diff 9x16 hook-v2
+graft compile --scion hook-v2 --out ad-v2.mp4
+graft dirty --scion hook-v2
 ```
 
-打印 `{hook}` 以及 hook→body 的 kerf，不会打印 `body`。
+`graft dirty` 会点名 `hook` 及其 hook→body kerf。`body` 和 `cta` 是干净的；
+编码字节会被复用。
 
-目前不支持：speed/retime、图层叠加、音频、NLE 导出。
-`params.speed` 只改变 action key。
+通过已交付 build 寻址平台指标：
 
-## 项目状态
-
-| 部分 | 状态 |
-| --- | --- |
-| Mission、principles、ADR | 已写入 |
-| Score / scion / time-map schema | 格式 id `0.1.0` |
-| Signal → dirty-set（`hook_rate` 不脏 body） | `ref/` + Rust |
-| Action graph + action cache | `graft-compile` / `graft-cas` |
-| 帧粒度（`graft-intra`） | 在仓库内；dest 是 `GFI1`，不是播放器文件 |
-| Long-GOP x264 mp4 | 系统 ffmpeg；closed-GOP 的 slot 文件；concat `-c copy` |
-| NLE 适配器 / 预览 / S3 | 本版本没有 |
-
-schema 格式 id `0.1.0` 不是 crate 版本。编译器的第一个 GitHub 标签是 `v0.2.0`（不要复用 spec 标签 `v0.1.0`）。破坏性 schema 变更走 RFC。
-
-## graft 不是什么
-
-- 不是对像素做 git。不要对成片 mp4 做 xdelta。
-- 不是通往每个 NLE 的无损往返。适配器是客人；损耗写在文档里。
-- 不是锁服务器、DAM 或审片工具。
-
-邻近工具（git、OTIO、IMF、ffmpeg concat）见 [docs/comparison.md](docs/comparison.md)。
-
-## 命令面
-
-```text
-graft init
-graft slot hook --window 0-3
-graft bind hook ./hooks/v3.mov
-graft scion 9x16 --dest 1080x1920 --encoder x264
-graft compile --out ad.mp4
-graft dirty
-graft signal --kind hook_rate --t 0-3
+```sh
+graft signal --kind hook_rate --build <build-id>
+graft iterate --from <build-id> --feedback <id> --scion hook-v3
 ```
 
-`export` 尚未实现。`--encoder graft-intra` 是帧粒度后端（测试 / image-seq），不是 QuickTime dest。
+这会弄脏 `hook` 以及 hook→body kerf，而不是 `body`。`iterate` 会 fork
+一项变更请求；它不会发明替换片段。
 
-## 下一步
+工作示例只有 JSON（占位哈希，git 中没有媒体），因此那里的 compile 只打印
+一份 **plan**。你自己的素材才会编译成 mp4。
 
-实现者文档为英文。[本 README 的翻译约定](docs/TRANSLATING.md)。
+## 安全
 
-| 文档 | 解决什么 |
-| --- | --- |
-| [docs/mission.md](docs/mission.md) | 为什么有 graft |
-| [docs/principles.md](docs/principles.md) | 不可妥协项与非目标 |
-| [docs/glossary.md](docs/glossary.md) | score、slot、scion、kerf、dest |
-| [docs/architecture.md](docs/architecture.md) | 分层、crate 图、编译管线 |
-| [docs/schema.md](docs/schema.md) | 对规范 JSON Schema 的说明 |
-| [docs/compile.md](docs/compile.md) | 缓存键、grain、smart concat |
-| [docs/time-map.md](docs/time-map.md) | 指标如何寻址到 slot |
-| [docs/adapters.md](docs/adapters.md) | 损耗矩阵 |
-| [docs/comparison.md](docs/comparison.md) | git、OTIO、IMF、Vit、Aspect |
-| [docs/roadmap.md](docs/roadmap.md) | 尚未完成的工作 |
-| [docs/brand/](docs/brand/) | 标志：两段素材，一处接合 |
-| [docs/adr/](docs/adr/) | 已经做出的决定 |
+本地素材字节与 build 输出位于被忽略的 `.graft/`。不要提交 essence
+（`.mov`、`.mp4`、`.mxf`）或凭据。通过 [SECURITY.md](SECURITY.md) 私下报告漏洞。
 
-规范的机器契约：[`schema/`](schema/)。
+## 另见
 
-## 贡献
-
-请读 [CONTRIBUTING.md](CONTRIBUTING.md)。schema 变更需要 RFC。
-所有提交必须带 Developer Certificate of Origin（`Signed-off-by`）。
-请友善：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+| | |
+|---|---|
+| 为什么存在 graft | [Mission](docs/mission.md) · [principles](docs/principles.md) |
+| 编译器契约 | [Architecture](docs/architecture.md) · [cache and kerfs](docs/compile.md) · [time map](docs/time-map.md) |
+| 机器契约 | [JSON Schema](schema/) · [worked example](examples/hook-v3-body-v1-9x16/) |
+| 边界 | [git, OTIO, IMF, ffmpeg concat](docs/comparison.md) · [adapter loss matrix](docs/adapters.md) |
+| 项目 | [Roadmap](docs/roadmap.md) · [contributing](CONTRIBUTING.md) · [translations](docs/TRANSLATING.md) |
 
 ## 许可
 
-Copyright 2026 [eonik](https://www.eonik.ai/)（[github.com/eonik-ai](https://github.com/eonik-ai)）。
+Copyright 2026 [eonik](https://www.eonik.ai/) ([github.com/eonik-ai](https://github.com/eonik-ai)).
 
-以 [Apache License, Version 2.0](LICENSE) 许可。
-选择 Apache-2.0 而不是 MIT，是因为专利授权。
+基于 [Apache License, Version 2.0](LICENSE)。
+选择 Apache-2.0 而非 MIT，是因为专利授权。
 贡献者是一等公民：没有 CLA，也没有版权转让。
-你保留补丁的版权；DCO 与 Apache §5 把它们许可进来。
-见 [NOTICE](NOTICE) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。
+你保留补丁版权；DCO 与 Apache §5 将其许可进来。
+见 [NOTICE](NOTICE) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。

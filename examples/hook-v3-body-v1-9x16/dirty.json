@@ -1,9 +1,8 @@
 {
-  "graft": "0.1.0",
+  "graft": "0.2.0",
   "signal": {
     "kind": "hook_rate",
-    "t0_s": 0.0,
-    "t1_s": 3.0,
+    "range": { "start": 0, "duration": 90 },
     "dest_id": "9x16"
   },
   "slots": ["hook"],

@@ -24,10 +24,14 @@ type_line "graft compile --out ad.mp4"
 graft compile --out ad.mp4 >/dev/null
 sleep 0.9
 
-type_line "graft bind hook ./hook-v2.mov"
-graft bind hook ./hook-v2.mov
+type_line "graft scion fork 9x16 hook-v2"
+graft scion fork 9x16 hook-v2
+sleep 0.5
+
+type_line "graft bind hook ./hook-v2.mov --scion hook-v2"
+graft bind hook ./hook-v2.mov --scion hook-v2
 sleep 0.6
 
-type_line "graft dirty"
-graft dirty
+type_line "graft dirty --scion hook-v2"
+graft dirty --scion hook-v2
 sleep 4

@@ -1,61 +1,113 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:graft:schema:scion:0.1.0",
+  "$id": "urn:graft:schema:scion:0.2.0",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "graft scion",
-  "description": "A named variant: concept + bindings + dest. 9:16 is a dest, not a slot.",
+  "description": "A named variant with optional parent and ordered layer opinions.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["graft", "id", "concept", "dest", "bindings"],
+  "required": ["graft", "id", "concept", "dest", "layers"],
   "properties": {
-    "graft": { "const": "0.1.0" },
-    "id": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Human id, e.g. hook_v3+body_v1+cta_v1@9x16"
-    },
+    "graft": { "const": "0.2.0" },
+    "id": { "type": "string", "minLength": 1 },
     "concept": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
-    "dest": { "$ref": "#/$defs/dest" },
-    "bindings": {
+    "parent": { "type": "string", "minLength": 1 },
+    "change_request": {
       "type": "object",
-      "minProperties": 1,
-      "additionalProperties": { "$ref": "#/$defs/binding" }
+      "additionalProperties": false,
+      "required": ["feedback", "slots"],
+      "properties": {
+        "feedback": { "type": "string", "minLength": 1 },
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        }
+      }
+    },
+    "dest": { "$ref": "#/$defs/dest" },
+    "layers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/layer" }
     }
   },
   "$defs": {
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": { "type": "integer", "minimum": 1 },
+        "den": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "duration": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "timedRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rate", "range"],
+      "properties": {
+        "rate": { "$ref": "#/$defs/rate" },
+        "range": { "$ref": "#/$defs/range" }
+      }
+    },
     "material": {
       "type": "string",
       "pattern": "^blake3:[0-9a-f]{64}$"
     },
+    "audioBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material", "source"],
+      "properties": {
+        "material": { "$ref": "#/$defs/material" },
+        "source": { "$ref": "#/$defs/timedRange" }
+      }
+    },
     "binding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["material", "in_s", "out_s"],
+      "required": ["material", "source"],
       "properties": {
         "material": { "$ref": "#/$defs/material" },
-        "in_s": { "type": "number", "minimum": 0 },
-        "out_s": { "type": "number", "minimum": 0 },
-        "params": {
+        "source": { "$ref": "#/$defs/timedRange" },
+        "params": { "type": "object", "additionalProperties": true },
+        "audio": { "$ref": "#/$defs/audioBinding" }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bindings"],
+      "properties": {
+        "name": { "enum": ["base", "copy", "grade", "legal"] },
+        "bindings": {
           "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "speed": { "type": "number", "exclusiveMinimum": 0 }
-          }
+          "additionalProperties": { "$ref": "#/$defs/binding" }
         }
       }
     },
     "dest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "width", "height", "fps", "pix_fmt", "color", "encoder"],
+      "required": ["id", "width", "height", "rate", "pix_fmt", "color", "encoder"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
-        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "rate": { "$ref": "#/$defs/rate" },
         "pix_fmt": { "type": "string", "minLength": 1 },
         "color": { "type": "string", "minLength": 1 },
         "encoder": { "$ref": "#/$defs/encoder" }
@@ -82,7 +134,8 @@
         },
         "preset": { "type": "string" },
         "keyint": { "type": "integer", "minimum": 1 },
-        "sc_threshold": { "type": "integer", "const": 0 }
+        "sc_threshold": { "type": "integer", "const": 0 },
+        "toolchain": { "type": "object", "additionalProperties": true }
       }
     }
   }
