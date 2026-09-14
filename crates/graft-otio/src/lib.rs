@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use graft_score::{
-    effective_bindings, Binding, BindingLayer, Error, FrameRange, FrameRate, Layer, Result, Scion,
-    Score, TimedRange, GRAFT_SCHEMA,
+    effective_bindings, AudioBinding, Binding, BindingLayer, Error, FrameRange, FrameRate, Layer,
+    Result, Scion, Score, TimedRange, GRAFT_SCHEMA,
 };
 
 pub fn export_otio(score: &Score, scion: &Scion, out: &Path) -> Result<serde_json::Value> {
@@ -20,13 +20,14 @@ pub fn export_otio(score: &Score, scion: &Scion, out: &Path) -> Result<serde_jso
                 serde_json::json!({
                     "OTIO_SCHEMA": "Clip.2",
                     "name": slot.id,
+                    "source_range": otio_range(binding.source),
                     "metadata": {
                         "graft": {
                             "slot": slot.id,
-                            "role": slot.role.as_str()
+                            "role": slot.role.as_str(),
+                            "audio": binding.audio
                         }
                     },
-                    "source_range": otio_range(binding.source),
                     "media_reference": {
                         "OTIO_SCHEMA": "ExternalReference.1",
                         "target_url": format!("graft://{}", binding.material),
@@ -163,13 +164,17 @@ pub fn import_otio(score: &Score, file: &Path, id: &str) -> Result<(Scion, serde
             clip.get("source_range")
                 .ok_or_else(|| Error::invalid("OTIO clip source_range is required"))?,
         )?;
+        let audio = clip
+            .pointer("/metadata/graft/audio")
+            .cloned()
+            .and_then(|value| serde_json::from_value::<AudioBinding>(value).ok());
         bindings.insert(
             slot.to_string(),
             Binding {
                 material: material.into(),
                 source,
                 params: None,
-                audio: None,
+                audio,
             },
         );
     }

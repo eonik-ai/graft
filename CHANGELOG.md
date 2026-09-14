@@ -11,6 +11,18 @@ crates.io is not published (`publish = false`).
 
 ### Added
 
+- Optional `score.joins` (`cut` / `fade`). Fade fills a real kerf; changing
+  duration misses that kerf only. Closed-GOP `cut` stays empty at IDR.
+- Overlay plane: `vo`/`bed` `audio_mix`, `captions` sidecar, `brand`
+  `overlay_mix`. A hook or caption swap does not recut body `slot_encode`.
+- `encoder.level` and `rate_control.mode=bitrate` reach ffmpeg. The dest
+  encoder fingerprint is shared, so a level/bitrate change misses every
+  `slot_encode`. Unknown binding `params` besides `speed` are rejected.
+  `scion create` defaults `--dest-id` from `score.dest_default`.
+- OTIO import restores bound spine audio from `metadata.graft.audio`.
+
+### Added (compiler physics)
+
 - Applied `params.speed`: `graft-intra` resamples dest frames; ffmpeg uses
   `setpts` / `atempo`. Adjacent clean slots stay hits.
 - Long-GOP kerf fill for non-IDR joins; empty kerf remains the closed-GOP

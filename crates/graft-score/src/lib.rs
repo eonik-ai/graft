@@ -28,7 +28,7 @@ pub use scion::{
     AudioBinding, Binding, BindingLayer, ChangeRequest, Dest, Encoder, RateControl,
     RateControlMode, Scion,
 };
-pub use score::{Clock, Score, Slot, Window, DEFAULT_SPILL_FRAMES};
+pub use score::{Clock, Join, Score, Slot, Window, DEFAULT_SPILL_FRAMES};
 pub use span::{parse_range, parse_wh, Range};
 pub use time::{FrameRange, FrameRate, TimedRange};
 pub use time_map::{TimeMap, TimeMapEntry};

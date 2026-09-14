@@ -2,7 +2,10 @@
 
 use graft_cas::{ActionKey, BlobId, Kind, Store};
 
-use crate::graph::{ActionGraph, AudioEncodeAction, ConcatAction, KerfAction, SlotEncodeAction};
+use crate::graph::{
+    ActionGraph, AudioEncodeAction, AudioMixAction, CaptionsAction, ConcatAction, KerfAction,
+    OverlayMixAction, SlotEncodeAction,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CacheStatus {
@@ -50,12 +53,34 @@ pub struct ScheduledConcat {
     pub cache: CacheStatus,
 }
 
+#[derive(Clone, Debug)]
+pub struct ScheduledCaptions {
+    pub action: CaptionsAction,
+    pub cache: CacheStatus,
+}
+
+#[derive(Clone, Debug)]
+pub struct ScheduledAudioMix {
+    pub action: AudioMixAction,
+    pub cache: CacheStatus,
+}
+
+#[derive(Clone, Debug)]
+pub struct ScheduledOverlayMix {
+    pub action: OverlayMixAction,
+    pub cache: CacheStatus,
+}
+
 /// Hits and misses from the action cache. Not a scion JSON diff.
 #[derive(Clone, Debug)]
 pub struct Schedule {
     pub slots: Vec<ScheduledSlot>,
     pub audio: Vec<ScheduledAudio>,
+    pub overlay_audio: Vec<ScheduledAudio>,
+    pub captions: Vec<ScheduledCaptions>,
     pub kerfs: Vec<ScheduledKerf>,
+    pub audio_mix: Option<ScheduledAudioMix>,
+    pub overlay_mix: Option<ScheduledOverlayMix>,
     pub concat: ScheduledConcat,
 }
 
@@ -95,6 +120,40 @@ pub fn schedule(graph: &ActionGraph, store: &dyn Store) -> Result<Schedule, graf
             cache: lookup(store, &action.key, Kind::AudioEncode)?,
         });
     }
+    let mut overlay_audio = Vec::new();
+    for action in &graph.overlay_audio {
+        overlay_audio.push(ScheduledAudio {
+            action: action.clone(),
+            cache: lookup(store, &action.key, Kind::AudioEncode)?,
+        });
+    }
+    let mut captions = Vec::new();
+    for action in &graph.captions {
+        captions.push(ScheduledCaptions {
+            action: action.clone(),
+            cache: lookup(store, &action.key, Kind::Captions)?,
+        });
+    }
+    let audio_mix = graph
+        .audio_mix
+        .as_ref()
+        .map(|action| {
+            Ok(ScheduledAudioMix {
+                action: action.clone(),
+                cache: lookup(store, &action.key, Kind::AudioMix)?,
+            })
+        })
+        .transpose()?;
+    let overlay_mix = graph
+        .overlay_mix
+        .as_ref()
+        .map(|action| {
+            Ok(ScheduledOverlayMix {
+                action: action.clone(),
+                cache: lookup(store, &action.key, Kind::OverlayMix)?,
+            })
+        })
+        .transpose()?;
     let concat = ScheduledConcat {
         action: graph.concat.clone(),
         cache: lookup(store, &graph.concat.key, Kind::Concat)?,
@@ -102,7 +161,11 @@ pub fn schedule(graph: &ActionGraph, store: &dyn Store) -> Result<Schedule, graf
     Ok(Schedule {
         slots,
         audio,
+        overlay_audio,
+        captions,
         kerfs,
+        audio_mix,
+        overlay_mix,
         concat,
     })
 }

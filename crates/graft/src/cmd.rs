@@ -46,6 +46,7 @@ pub fn init(dir: &Path) -> Result<()> {
         layers: vec![Layer::Base, Layer::Copy, Layer::Grade, Layer::Legal],
         dest_default: Some("9x16".into()),
         spill_threshold_frames: DEFAULT_SPILL_FRAMES,
+        joins: Vec::new(),
     };
     score.validate()?;
     save_json(&path, &score)?;
@@ -122,7 +123,7 @@ pub fn slot(
 pub fn scion_create(
     dir: &Path,
     id: String,
-    dest_id: String,
+    dest_id: Option<String>,
     dest: String,
     pix_fmt: String,
     color: String,
@@ -133,6 +134,9 @@ pub fn scion_create(
         bail!("scion {id} already exists");
     }
     let score = load_score(&paths::score(dir))?;
+    let dest_id = dest_id
+        .or_else(|| score.dest_default.clone())
+        .unwrap_or_else(|| id.clone());
     let (width, height) = parse_wh(&dest)?;
     let mut encoder = Encoder::named(&encoder)?;
     if matches!(encoder.impl_name.as_str(), "x264" | "libx264") {
@@ -253,7 +257,7 @@ pub fn bind(
     if !score.layers.contains(&layer) {
         bail!("layer {layer} is not declared by score.layers");
     }
-    let resolved = resolve_material(dir, &material)?;
+    let resolved = resolve_material(dir, &material, slot_def.role)?;
     let rate = resolved
         .probe
         .as_ref()
@@ -321,6 +325,25 @@ pub fn dirty(dir: &Path, scion: Option<String>, prev: Option<PathBuf>) -> Result
         .filter(|slot| slot.cache == "hit")
         .map(|slot| slot.id.clone())
         .collect();
+    let captions: Vec<String> = plan
+        .captions
+        .iter()
+        .filter(|slot| slot.cache == "miss")
+        .map(|slot| slot.id.clone())
+        .collect();
+    let overlay_audio: Vec<String> = plan
+        .overlay_audio
+        .iter()
+        .filter(|slot| slot.cache == "miss")
+        .map(|slot| slot.id.clone())
+        .collect();
+    let mut mixes = Vec::new();
+    if plan.audio_mix == Some("miss") {
+        mixes.push("audio_mix");
+    }
+    if plan.overlay_mix == Some("miss") {
+        mixes.push("overlay_mix");
+    }
     paths::print_json(&serde_json::json!({
         "graft": GRAFT_SCHEMA,
         "kind": "compile",
@@ -329,6 +352,9 @@ pub fn dirty(dir: &Path, scion: Option<String>, prev: Option<PathBuf>) -> Result
         "slots": slots,
         "kerfs": kerfs,
         "clean": clean,
+        "overlay_audio": overlay_audio,
+        "captions": captions,
+        "mixes": mixes,
         "prev_overlay": plan.prev_overlay
     }))
 }
@@ -387,6 +413,12 @@ pub fn compile_cmd(
             }
             std::fs::write(&user_out, &bytes)?;
             eprintln!("wrote {}", user_out.display());
+            for (slot_id, blob) in &outcome.captions {
+                let text = store.get_blob(Kind::Captions, blob)?;
+                let sidecar = user_out.with_extension("vtt");
+                std::fs::write(&sidecar, text)?;
+                eprintln!("wrote {} ({slot_id})", sidecar.display());
+            }
         }
     }
     let build = BuildRecord {
@@ -735,7 +767,7 @@ struct ResolvedMaterial {
     probe: Option<graft_compile::Probe>,
 }
 
-fn resolve_material(dir: &Path, spec: &str) -> Result<ResolvedMaterial> {
+fn resolve_material(dir: &Path, spec: &str, role: graft_score::Role) -> Result<ResolvedMaterial> {
     if graft_score::is_material_id(spec) {
         return Ok(ResolvedMaterial {
             id: spec.into(),
@@ -768,11 +800,24 @@ fn resolve_material(dir: &Path, spec: &str) -> Result<ResolvedMaterial> {
             );
             Some(probe)
         }
-        MaterialKind::Opaque { bytes } => bail!("material is not decodable media ({bytes} bytes)"),
+        MaterialKind::Opaque { bytes: size } => {
+            if role == graft_score::Role::Captions && looks_like_captions(&bytes) {
+                eprintln!("probe: captions {size} bytes");
+                None
+            } else {
+                bail!("material is not decodable media ({size} bytes)")
+            }
+        }
     };
     let store = Fs::open(paths::graft_dir(dir))?;
     let id = store.put_blob(Kind::Material, &bytes)?.to_string();
     Ok(ResolvedMaterial { id, probe })
+}
+
+fn looks_like_captions(bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes);
+    let trimmed = text.trim_start();
+    trimmed.starts_with("WEBVTT") || trimmed.contains("-->")
 }
 
 fn load_scions(dir: &Path) -> Result<BTreeMap<String, Scion>> {

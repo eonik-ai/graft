@@ -14,7 +14,7 @@ Every export and import writes a machine-readable loss report.
 
 | Guest | Export from graft | Import to graft | Loses |
 | --- | --- | --- | --- |
-| OTIO (implemented subset) | clips, rational ranges, `graft://` media refs, slot markers, dest/scion provenance | cuts, graft media refs, markers, timing | effects, grades, generators, transitions, non-graft metadata, inheritance/layers flatten |
+| OTIO (implemented subset) | clips, rational ranges, `graft://` media refs, slot markers, dest/scion provenance, spine audio metadata | cuts, graft media refs, markers, timing, bound spine audio | effects, grades, generators, transitions, non-graft metadata, inheritance/layers flatten |
 | FCPXML | not implemented | not implemented | anything FCPXML cannot round-trip |
 | MLT / GES | not implemented | not implemented | graft slots flatten |
 | IMF CPL + MXF | finish backend later | not an authoring import | in-progress / incomplete packages (IMF UG non-goal) |

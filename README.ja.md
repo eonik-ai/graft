@@ -54,14 +54,16 @@ _[asciinema](https://github.com/asciinema/asciinema) で記録した実際のロ
 - scion と layer で bind し、最も強い layer の意見を平坦化する
 - メディアをマージせずに意味的 diff と三方向 merge を示す
 - 名前付き `hook`、`body`、`proof`、`cta` slot を dest へコンパイルする
+- `vo` / `bed` をミックス音声、`captions` を sidecar、`brand` を絵 concat 上の overlay としてコンパイルする
+- 隣接 slot_encode を書き直さずに score 上で `fade` join を名付ける
 - 同期 AAC を独立キャッシュし、映像リンクと mux する
 - 記録済み `params.speed` を適用する（setpts/atempo または intra 再サンプル）。隣接するクリーン slot は汚さない
 - 接合が IDR 非整列のとき Long-GOP kerf を埋める。closed-GOP ファイル接合では空 kerf
 - 変わった hook を再 encode し、変わらない body を bitstream copy する
 - 宣言ウィンドウと出荷済み time map で `hook_rate` を解決する
 - 範囲付き OTIO サブセットを損失レポート付きで export/import する
-- decode と composite で選択 scion をプレビューし、同期音声を載せる
-- 欠損 blob 発見つきで object-store ルートへ blob を同期する
+- decode と composite で選択 scion をプレビューし、同期音声と overlay mix を載せる
+- object-store ルートへ欠損 blob 発見つきで同期する。remote compile はない。
 
 ## できないこと
 

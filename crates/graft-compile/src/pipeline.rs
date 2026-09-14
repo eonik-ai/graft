@@ -5,9 +5,10 @@ use graft_score::{Scion, Score, TimeMap};
 
 use crate::concat::{ConcatBackend, ConcatError, ConcatPartBytes, ConcatRequest};
 use crate::encode::{
-    AudioEncodeRequest, EncodeBackend, EncodeError, KerfEncodeRequest, SlotEncodeRequest,
+    AudioEncodeRequest, AudioMixPart, EncodeBackend, EncodeError, KerfEncodeRequest,
+    SlotEncodeRequest,
 };
-use crate::graph::{lower, ActionGraph, ConcatPart, LowerError};
+use crate::graph::{lower, ActionGraph, ConcatPart, KerfAction, LowerError};
 use crate::plan::{plan_from_schedule, CompilePlan};
 use crate::schedule::{schedule, CacheStatus, Schedule};
 
@@ -35,6 +36,27 @@ pub struct CompileOutcome {
     pub graph: ActionGraph,
     pub encoded: bool,
     pub concat: Option<BlobId>,
+    pub captions: Vec<(String, BlobId)>,
+}
+
+fn apply_fade_trims(kerfs: &[KerfAction], parts: &[ConcatPart], bytes: &mut [ConcatPartBytes]) {
+    for (i, part) in parts.iter().enumerate() {
+        let ConcatPart::Kerf { left, right } = part else {
+            continue;
+        };
+        let Some(kerf) = kerfs.iter().find(|k| k.left == *left && k.right == *right) else {
+            continue;
+        };
+        if !kerf.transition.eq_ignore_ascii_case("fade") || kerf.duration_frames == 0 {
+            continue;
+        }
+        if i > 0 {
+            bytes[i - 1].trim_tail_frames = kerf.duration_frames;
+        }
+        if i + 1 < bytes.len() {
+            bytes[i + 1].trim_head_frames = kerf.duration_frames;
+        }
+    }
 }
 
 fn put_action(
@@ -59,7 +81,7 @@ fn execute(
     store: &dyn Store,
     encode: &dyn EncodeBackend,
     concat: &dyn ConcatBackend,
-) -> Result<BlobId, CompileError> {
+) -> Result<(BlobId, Vec<(String, BlobId)>), CompileError> {
     let mut slot_blobs: Vec<BlobId> = Vec::new();
     for scheduled in &sched.slots {
         let blob = match &scheduled.cache {
@@ -138,6 +160,50 @@ fn execute(
         kerf_blobs.push(blob);
     }
 
+    let mut overlay_audio_blobs: Vec<BlobId> = Vec::new();
+    for scheduled in &sched.overlay_audio {
+        let blob = match &scheduled.cache {
+            CacheStatus::Hit { blob } => blob.clone(),
+            CacheStatus::Miss => {
+                let material = store.get_blob(Kind::Material, &scheduled.action.material)?;
+                let bytes = encode.encode_audio(&AudioEncodeRequest {
+                    action: &scheduled.action,
+                    dest: &graph.dest,
+                    material: &material,
+                })?;
+                put_action(
+                    store,
+                    &scheduled.action.key,
+                    Kind::AudioEncode,
+                    &bytes,
+                    serde_json::json!({"slot": scheduled.action.slot.id}),
+                    serde_json::json!({"action": "audio_encode"}),
+                )?
+            }
+        };
+        overlay_audio_blobs.push(blob);
+    }
+
+    let mut caption_blobs: Vec<(String, BlobId)> = Vec::new();
+    for scheduled in &sched.captions {
+        let blob = match &scheduled.cache {
+            CacheStatus::Hit { blob } => blob.clone(),
+            CacheStatus::Miss => {
+                let material = store.get_blob(Kind::Material, &scheduled.action.material)?;
+                let bytes = encode.encode_captions(&material)?;
+                put_action(
+                    store,
+                    &scheduled.action.key,
+                    Kind::Captions,
+                    &bytes,
+                    serde_json::json!({"slot": scheduled.action.slot.id}),
+                    serde_json::json!({"action": "captions"}),
+                )?
+            }
+        };
+        caption_blobs.push((scheduled.action.slot.id.clone(), blob));
+    }
+
     let mut audio_blobs: Vec<BlobId> = Vec::new();
     for scheduled in &sched.audio {
         let blob = match &scheduled.cache {
@@ -172,7 +238,7 @@ fn execute(
     }
 
     match &sched.concat.cache {
-        CacheStatus::Hit { blob } => Ok(blob.clone()),
+        CacheStatus::Hit { blob } => Ok((blob.clone(), caption_blobs)),
         CacheStatus::Miss => {
             let mut parts = Vec::new();
             let mut slot_i = 0;
@@ -195,8 +261,11 @@ fn execute(
                     empty: kind == Kind::Kerf && bytes.is_empty(),
                     bytes,
                     duration_s: 0.0,
+                    trim_head_frames: 0,
+                    trim_tail_frames: 0,
                 });
             }
+            apply_fade_trims(&graph.kerfs, &graph.concat.parts, &mut parts);
             let audio_by_slot: std::collections::BTreeMap<String, graft_cas::BlobId> = graph
                 .audio
                 .iter()
@@ -221,24 +290,84 @@ fn execute(
                                     empty: bytes.is_empty(),
                                     bytes,
                                     duration_s,
+                                    trim_head_frames: 0,
+                                    trim_tail_frames: 0,
                                 })
                         } else {
                             Ok(ConcatPartBytes {
                                 empty: true,
                                 bytes: Vec::new(),
                                 duration_s,
+                                trim_head_frames: 0,
+                                trim_tail_frames: 0,
                             })
                         }
                     })
                     .collect::<Result<Vec<_>, _>>()?
             };
-            let dest_bytes = concat.concat(&ConcatRequest {
+            let picture_only = graph.audio_mix.is_some() || graph.overlay_mix.is_some();
+            let mut dest_bytes = concat.concat(&ConcatRequest {
                 action: &graph.concat,
                 dest: &graph.dest,
                 parts: &parts,
-                audio_parts: &audio_parts,
+                audio_parts: if picture_only { &[] } else { &audio_parts },
             })?;
-            put_action(
+            if let Some(overlay) = &graph.overlay_mix {
+                let brand = store.get_blob(Kind::Material, &overlay.brand.material)?;
+                dest_bytes = encode.overlay_brand(&graph.dest, &dest_bytes, &brand)?;
+                put_action(
+                    store,
+                    &overlay.key,
+                    Kind::OverlayMix,
+                    &dest_bytes,
+                    serde_json::json!({"slot": overlay.brand.slot.id}),
+                    serde_json::json!({"action": "overlay_mix"}),
+                )?;
+            }
+            if let Some(mix) = &graph.audio_mix {
+                let mut owned = Vec::new();
+                for blob in audio_blobs.iter().chain(overlay_audio_blobs.iter()) {
+                    owned.push(store.get_blob(Kind::AudioEncode, blob)?);
+                }
+                let refs = graph
+                    .audio
+                    .iter()
+                    .chain(graph.overlay_audio.iter())
+                    .zip(owned.iter())
+                    .map(|(action, bytes)| AudioMixPart {
+                        bytes,
+                        start_s: graph.dest.rate.seconds_from_frames(action.slot.range.start),
+                        duration_s: graph
+                            .dest
+                            .rate
+                            .seconds_from_frames(action.slot.range.duration as i64),
+                    })
+                    .collect::<Vec<_>>();
+                let mixed = encode.mix_audio(&graph.dest, &refs)?;
+                put_action(
+                    store,
+                    &mix.key,
+                    Kind::AudioMix,
+                    &mixed,
+                    serde_json::json!({"parts": refs.len()}),
+                    serde_json::json!({"action": "audio_mix"}),
+                )?;
+                dest_bytes = mux_mixed_audio(concat, graph, dest_bytes, mixed)?;
+            } else if picture_only && !audio_parts.is_empty() {
+                dest_bytes = concat.concat(&ConcatRequest {
+                    action: &graph.concat,
+                    dest: &graph.dest,
+                    parts: &[ConcatPartBytes {
+                        empty: dest_bytes.is_empty(),
+                        bytes: dest_bytes,
+                        duration_s: 0.0,
+                        trim_head_frames: 0,
+                        trim_tail_frames: 0,
+                    }],
+                    audio_parts: &audio_parts,
+                })?;
+            }
+            let blob = put_action(
                 store,
                 &graph.concat.key,
                 Kind::Concat,
@@ -249,9 +378,43 @@ fn execute(
                     "parts": graph.concat.parts.len()
                 }),
                 serde_json::json!({"action": "link_composition"}),
-            )
+            )?;
+            Ok((blob, caption_blobs))
         }
     }
+}
+
+fn mux_mixed_audio(
+    concat: &dyn ConcatBackend,
+    graph: &ActionGraph,
+    picture: Vec<u8>,
+    audio: Vec<u8>,
+) -> Result<Vec<u8>, CompileError> {
+    let duration_s = graph.dest.rate.seconds_from_frames(
+        graph
+            .slots
+            .iter()
+            .map(|slot| slot.slot.range.duration as i64)
+            .sum(),
+    );
+    Ok(concat.concat(&ConcatRequest {
+        action: &graph.concat,
+        dest: &graph.dest,
+        parts: &[ConcatPartBytes {
+            empty: picture.is_empty(),
+            bytes: picture,
+            duration_s,
+            trim_head_frames: 0,
+            trim_tail_frames: 0,
+        }],
+        audio_parts: &[ConcatPartBytes {
+            empty: audio.is_empty(),
+            bytes: audio,
+            duration_s,
+            trim_head_frames: 0,
+            trim_tail_frames: 0,
+        }],
+    })?)
 }
 
 pub fn materials_present(graph: &ActionGraph, store: &dyn Store) -> bool {
@@ -263,6 +426,19 @@ pub fn materials_present(graph: &ActionGraph, store: &dyn Store) -> bool {
             .audio
             .iter()
             .all(|audio| store.contains_blob(Kind::Material, &audio.material))
+        && graph
+            .overlay_audio
+            .iter()
+            .all(|audio| store.contains_blob(Kind::Material, &audio.material))
+        && graph
+            .captions
+            .iter()
+            .all(|cap| store.contains_blob(Kind::Material, &cap.material))
+        && graph
+            .overlay_mix
+            .as_ref()
+            .map(|mix| store.contains_blob(Kind::Material, &mix.brand.material))
+            .unwrap_or(true)
 }
 
 /// Lower → schedule from the action cache → encode misses when a backend is on.
@@ -284,10 +460,11 @@ pub fn compile(
         ));
     }
     let plan = plan_from_schedule(&graph, &sched, ready);
-    let concat_blob = if ready {
-        Some(execute(&graph, &sched, store, encode, concat)?)
+    let (concat_blob, captions) = if ready {
+        let (blob, captions) = execute(&graph, &sched, store, encode, concat)?;
+        (Some(blob), captions)
     } else {
-        None
+        (None, Vec::new())
     };
     Ok(CompileOutcome {
         time_map: graph.time_map.clone(),
@@ -295,6 +472,7 @@ pub fn compile(
         plan,
         encoded: ready,
         concat: concat_blob,
+        captions,
     })
 }
 

@@ -54,6 +54,9 @@ The replay source is [`landing.cast`](docs/assets/landing.cast)._
 - Bind by scion and layer; flatten strongest-layer opinions
 - Show semantic diff and three-way merge without merging media
 - Compile named `hook`, `body`, `proof`, and `cta` slots to a dest
+- Compile `vo` / `bed` as mixed audio, `captions` as a sidecar, and
+  `brand` as an overlay on the picture concat
+- Name a `fade` join on the score without rewriting adjacent slot encodes
 - Cache synchronized AAC independently and mux it with the video link
 - Apply recorded `params.speed` (setpts/atempo or intra resample) without
   dirtying adjacent clean slots
@@ -63,7 +66,9 @@ The replay source is [`landing.cast`](docs/assets/landing.cast)._
 - Resolve `hook_rate` through the declared window and the shipped time map
 - Export/import a scoped OTIO subset with an explicit loss report
 - Preview a selected scion by decode and composite, with synced audio
-- Sync blobs to an object-store root with missing-blob discovery
+  and overlay mix
+- Sync blobs to a filesystem object-store root with missing-blob
+  discovery. There is no remote compile.
 
 ## What it cannot do
 

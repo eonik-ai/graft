@@ -783,3 +783,157 @@ fn speed_retime_and_preview_audio_on_generated_media() {
     assert_eq!(first["plan"]["encode"], true);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn scion_create_defaults_dest_id_from_score() {
+    let dir = tmp("dest-default");
+    run_ok(&dir, &["init"]);
+    run_ok(
+        &dir,
+        &[
+            "scion",
+            "create",
+            "phone",
+            "--dest",
+            "64x64",
+            "--encoder",
+            "graft-intra",
+        ],
+    );
+    let scion: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("scions/phone.json")).unwrap()).unwrap();
+    assert_eq!(scion["dest"]["id"], "9x16");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn overlay_roles_write_sidecar_and_keep_body_on_hook_swap() {
+    if !ffmpeg_available() {
+        eprintln!("skip overlay_roles_write_sidecar_and_keep_body_on_hook_swap — install ffmpeg");
+        return;
+    }
+    let dir = tmp("overlay");
+    run_ok(&dir, &["init"]);
+    run_ok(
+        &dir,
+        &[
+            "slot",
+            "hook",
+            "--span",
+            "0-1",
+            "--window",
+            "0-1",
+            "--window-kind",
+            "hook_rate",
+        ],
+    );
+    run_ok(&dir, &["slot", "body", "--span", "1-3"]);
+    run_ok(&dir, &["slot", "cta", "--span", "3-4", "--role", "cta"]);
+    run_ok(&dir, &["slot", "vo", "--span", "0-1", "--role", "vo"]);
+    run_ok(&dir, &["slot", "bed", "--span", "0-4", "--role", "bed"]);
+    run_ok(
+        &dir,
+        &["slot", "captions", "--span", "0-4", "--role", "captions"],
+    );
+    run_ok(&dir, &["slot", "brand", "--span", "0-4", "--role", "brand"]);
+    run_ok(
+        &dir,
+        &[
+            "scion",
+            "create",
+            "9x16",
+            "--dest",
+            "64x64",
+            "--encoder",
+            "x264",
+        ],
+    );
+    let hook_a = write_color(&dir, "hook-a.mp4", "red", "1.2", "30");
+    let hook_b = write_color(&dir, "hook-b.mp4", "blue", "1.2", "30");
+    let body = write_color(&dir, "body.mp4", "green", "2.2", "30");
+    let cta = write_color(&dir, "cta.mp4", "yellow", "1.2", "30");
+    let vo = write_color(&dir, "vo.mp4", "gray", "1.2", "30");
+    let bed = write_color(&dir, "bed.mp4", "black", "4.2", "30");
+    let brand = write_color(&dir, "brand.mp4", "white", "1.2", "30");
+    let captions = dir.join("caps.vtt");
+    fs::write(&captions, "WEBVTT\n\n00:00.000 --> 00:04.000\nHi\n").unwrap();
+    let bind = |slot: &str, file: &Path, out: &str| {
+        run_ok(
+            &dir,
+            &[
+                "bind",
+                slot,
+                file.to_str().unwrap(),
+                "--in",
+                "0",
+                "--out",
+                out,
+                "--scion",
+                "9x16",
+            ],
+        );
+    };
+    bind("hook", &hook_a, "1");
+    bind("body", &body, "2");
+    bind("cta", &cta, "1");
+    bind("vo", &vo, "1");
+    bind("bed", &bed, "4");
+    bind("captions", &captions, "4");
+    bind("brand", &brand, "4");
+    let first = run_ok(&dir, &["compile", "--scion", "9x16", "--out", "ad.mp4"]);
+    assert_eq!(first["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    assert!(dir.join("ad.vtt").is_file());
+    assert!(probe_has_audio(&dir.join("ad.mp4")));
+    let warmed = run_ok(
+        &dir,
+        &["compile", "--scion", "9x16", "--out", "ad-warm.mp4"],
+    );
+    let body_blob = warmed["plan"]["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|slot| slot["id"] == "body")
+        .unwrap()["blob"]
+        .clone();
+    assert!(body_blob.is_string());
+    run_ok(
+        &dir,
+        &[
+            "bind",
+            "hook",
+            hook_b.to_str().unwrap(),
+            "--in",
+            "0",
+            "--out",
+            "1",
+            "--scion",
+            "9x16",
+        ],
+    );
+    let second = run_ok(&dir, &["compile", "--scion", "9x16", "--out", "ad-v2.mp4"]);
+    let body_after = second["plan"]["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|slot| slot["id"] == "body")
+        .unwrap()["blob"]
+        .clone();
+    assert_eq!(body_blob, body_after);
+    assert_eq!(
+        second["plan"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|slot| slot["id"] == "body")
+            .unwrap()["cache"],
+        "hit"
+    );
+    let dirty = run_ok(&dir, &["dirty", "--scion", "9x16"]);
+    assert!(dirty["clean"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|slot| slot == "body"));
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -68,17 +68,86 @@ pub fn render(project: &Path, score: &Score, scion: &Scion, store: &Fs, out: &Pa
             .map(|i| format!("[v{i}]{}", audio_labels[i]))
             .collect::<Vec<_>>()
             .join("");
-        filters.push(format!("{paired}concat=n={inputs}:v=1:a=1[outv][outa]"));
+        filters.push(format!("{paired}concat=n={inputs}:v=1:a=1[basev][basea]"));
     } else {
         let vlabels = (0..inputs)
             .map(|i| format!("[v{i}]"))
             .collect::<Vec<_>>()
             .join("");
-        filters.push(format!("{vlabels}concat=n={inputs}:v=1:a=0[outv]"));
+        filters.push(format!("{vlabels}concat=n={inputs}:v=1:a=0[basev]"));
     }
+    let mut picture = "basev".to_string();
+    if let Some(slot) = score
+        .slots
+        .iter()
+        .find(|s| s.role == graft_score::Role::Brand)
+    {
+        if let Some(binding) = bindings.get(&slot.id) {
+            let id = BlobId::parse(&binding.material)?;
+            let bytes = store.get_blob(Kind::Material, &id)?;
+            let path = temp.path().join("brand.media");
+            std::fs::write(&path, bytes)?;
+            args.push("-i".into());
+            args.push(path.to_string_lossy().into_owned());
+            let brand_i = args.iter().filter(|a| *a == "-i").count() - 1;
+            filters.push(format!(
+                "[{brand_i}:v]scale={}:{}:flags=bicubic[brand];[{picture}][brand]overlay=0:0:shortest=1[branded]",
+                scion.dest.width.min(960),
+                scion.dest.height.min(960)
+            ));
+            picture = "branded".into();
+        }
+    }
+    let mut overlay_audio = Vec::new();
+    for slot in score
+        .slots
+        .iter()
+        .filter(|s| matches!(s.role, graft_score::Role::Vo | graft_score::Role::Bed))
+    {
+        let Some(binding) = bindings.get(&slot.id) else {
+            continue;
+        };
+        let id = BlobId::parse(&binding.material)?;
+        let bytes = store.get_blob(Kind::Material, &id)?;
+        let path = temp.path().join(format!("{}.audio", slot.id));
+        std::fs::write(&path, bytes)?;
+        args.push("-i".into());
+        args.push(path.to_string_lossy().into_owned());
+        let idx = args.iter().filter(|a| *a == "-i").count() - 1;
+        let delay = (scion.dest.rate.seconds_from_frames(slot.range.start) * 1000.0).round() as i64;
+        filters.push(format!(
+            "[{idx}:a]adelay={delay}|{delay},asetpts=PTS-STARTPTS[ov{idx}]"
+        ));
+        overlay_audio.push(format!("[ov{idx}]"));
+    }
+    if overlay_audio.is_empty() {
+        filters.push(format!("[{picture}]copy[outv]"));
+        if any_audio {
+            filters.push("[basea]anull[outa]".into());
+        }
+    } else if any_audio {
+        let n = overlay_audio.len() + 1;
+        filters.push(format!(
+            "[basea]{}amix=inputs={n}:duration=longest:normalize=0[outa]",
+            overlay_audio.join("")
+        ));
+        filters.push(format!("[{picture}]copy[outv]"));
+    } else {
+        filters.push(format!(
+            "{}amix=inputs={}:duration=longest:normalize=0[outa]",
+            overlay_audio.join(""),
+            overlay_audio.len()
+        ));
+        filters.push(format!("[{picture}]copy[outv]"));
+    }
+    let map_audio = any_audio
+        || score.slots.iter().any(|s| {
+            matches!(s.role, graft_score::Role::Vo | graft_score::Role::Bed)
+                && bindings.contains_key(&s.id)
+        });
     args.extend(["-filter_complex".into(), filters.join(";")]);
     args.extend(["-map".into(), "[outv]".into()]);
-    if any_audio {
+    if map_audio {
         args.extend(["-map".into(), "[outa]".into(), "-c:a".into(), "aac".into()]);
     } else {
         args.push("-an".into());

@@ -70,7 +70,7 @@ are separate stores. See ADR 0002, ADR 0006, and ADR 0007.
 - **USD:** layers are opinions with strength. Flatten to one binding per
   slot **before** the action graph. Not a pixel blend.
 - **smartcut / LosslessCut:** grain is physics (frame vs GOP). Intra kerf
-  may be empty. Long-GOP fills the same kerf node later.
+  may be empty. Long-GOP fills the same kerf node at a non-IDR join.
 
 ## Device vs server
 
@@ -130,10 +130,11 @@ score.json + selected scion
         │
         ▼
    3. lower action graph       SlotEncode, Kerf, Concat
-        │
+        │                      plus vo/bed audio_encode, captions,
+        │                      audio_mix, brand overlay_mix
         ├──────────────────────► time map artifact
         │                         keyed by scion_hash
-        │                         graft signal uses this ∩ metric
+        │                         every bound slot, spine first
         │
         ▼
    4. schedule                 action cache: hit / miss
@@ -142,10 +143,11 @@ score.json + selected scion
    5. encode misses            EncodeBackend (`graft-intra` or ffmpeg/x264)
         │                       put BlobId, record ActionKey
         ▼
-   6. concat                   hits + misses → dest file
+   6. concat / mix             picture concat, optional overlay_mix,
+        │                       audio_mix, captions sidecar
         │                       kind concat, never essence
         ▼
-      dest file
+      dest file (+ sidecar)
 ```
 
 Two dirty sets, do not collapse them:
@@ -205,13 +207,13 @@ Mirrors `schema/`. Do not add a field here that is not in the schema.
 
 | Module | Job |
 | --- | --- |
-| `Kind` | `material` \| `slot_encode` \| `audio_encode` \| `kerf` \| `concat` |
+| `Kind` | `material` \| `slot_encode` \| `audio_encode` \| `kerf` \| `concat` \| `captions` \| `audio_mix` \| `overlay_mix` |
 | `BlobId` | BLAKE3 of bytes (`blake3:<hex>`) |
 | `ActionKey` | BLAKE3 of canonical action JSON (hex) |
 | `Store` | namespaced `put_blob` / `get_blob` + `get_action` / `put_action` |
 | `Memory` | tests and ephemeral device stores |
 | `Fs` | `.graft/blobs/<kind>/<aa>/<hex>` and `.graft/actions/<aa>/<hex>` |
-| `Object` | same layout on a remote root; resumable put; missing-blob discovery |
+| `Object` | same layout on a remote filesystem root; resumable put; missing-blob discovery |
 
 Object-store backends implement `Store`. They do not change the IR.
 Local store lives at `<project>/.graft` and is gitignored.
@@ -223,7 +225,7 @@ Local store lives at `<project>/.graft` and is gitignored.
 | `flatten` | layer strength → one binding per slot |
 | `graph` | lower Score + Scion to the action DAG |
 | `schedule` | hits/misses from the action cache |
-| `keys` | `slot_encode` / `audio_encode` / `kerf` / `scion_hash` → `ActionKey` |
+| `keys` | `slot_encode` / `audio_encode` / `kerf` / `captions` / `audio_mix` / `overlay_mix` / `scion_hash` → `ActionKey` |
 | `grain` | frame vs GOP; whether a kerf is a no-op |
 | `encode` | `EncodeBackend` against `Action` + bytes |
 | `concat` | `ConcatBackend`; concat is a linker product |
@@ -237,13 +239,15 @@ Local store lives at `<project>/.graft` and is gitignored.
 Long-GOP uses the same graph: `FfmpegX264` shells out to system ffmpeg
 (Apache-2.0 graft does not link GPL x264). Slot encodes are closed-GOP
 (IDR at the start of each slot file). Concat bitstream-copies them.
-Kerf is an empty node at an IDR join; mid-GOP splice can fill that node
-later.
+Kerf is an empty node at an IDR join; a non-IDR join or a named fade
+fills that node. Arbitrary-source mid-GOP repair remains later.
 
 The compiler is sequential. The ffmpeg path caches synchronized AAC
-independently and muxes it after a verified video link. `ActionResult`
-records blob, size, metadata, and provenance. Arbitrary-source mid-GOP
-repair remains later.
+independently and muxes it after a verified video link. Named fade
+kerfs fill the same kerf node; closed-GOP `cut` stays empty at an IDR
+join. `vo`/`bed`/`captions`/`brand` are sibling mix/sidecar actions.
+`ActionResult` records blob, size, metadata, and provenance.
+Arbitrary-source mid-GOP repair remains later.
 
 ### `graft` CLI
 

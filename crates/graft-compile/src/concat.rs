@@ -17,6 +17,8 @@ pub struct ConcatPartBytes {
     pub empty: bool,
     pub bytes: Vec<u8>,
     pub duration_s: f64,
+    pub trim_head_frames: u64,
+    pub trim_tail_frames: u64,
 }
 
 pub struct ConcatRequest<'a> {

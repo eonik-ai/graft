@@ -126,6 +126,64 @@ impl IntraSeq {
         })
     }
 
+    pub fn trim_frames(&self, head: usize, tail: usize) -> Result<Self, ConcatError> {
+        if head + tail > self.frames.len() {
+            return Err(ConcatError::Invalid(format!(
+                "intra trim {head}+{tail} exceeds {} frames",
+                self.frames.len()
+            )));
+        }
+        Ok(Self {
+            width: self.width,
+            height: self.height,
+            fps_num: self.fps_num,
+            fps_den: self.fps_den,
+            frames: self.frames[head..self.frames.len() - tail].to_vec(),
+        })
+    }
+
+    pub fn fade_join(
+        left: &Self,
+        right: &Self,
+        duration_frames: usize,
+    ) -> Result<Self, EncodeError> {
+        if duration_frames == 0
+            || duration_frames > left.frames.len()
+            || duration_frames > right.frames.len()
+        {
+            return Err(EncodeError::Invalid(
+                r#"{"error":"invalid_fade","reason":"fade duration does not fit both sides"}"#
+                    .into(),
+            ));
+        }
+        if left.width != right.width
+            || left.height != right.height
+            || left.fps_num != right.fps_num
+            || left.fps_den != right.fps_den
+        {
+            return Err(EncodeError::Invalid(
+                "fade kerf requires matching geometry and fps".into(),
+            ));
+        }
+        let mut frames = Vec::with_capacity(duration_frames * 2);
+        let left_start = left.frames.len() - duration_frames;
+        for i in 0..duration_frames {
+            let t = (i as f64 + 1.0) / (duration_frames as f64 + 1.0);
+            frames.push(blend_rgb(&left.frames[left_start + i], &[], 1.0 - t));
+        }
+        for i in 0..duration_frames {
+            let t = (i as f64 + 1.0) / (duration_frames as f64 + 1.0);
+            frames.push(blend_rgb(&right.frames[i], &[], t));
+        }
+        Ok(Self {
+            width: left.width,
+            height: left.height,
+            fps_num: left.fps_num,
+            fps_den: left.fps_den,
+            frames,
+        })
+    }
+
     pub fn concat_seqs(parts: &[Self]) -> Result<Self, ConcatError> {
         let Some(first) = parts.first() else {
             return Err(ConcatError::Invalid("concat has no parts".into()));
@@ -151,6 +209,13 @@ impl IntraSeq {
             frames,
         })
     }
+}
+
+fn blend_rgb(src: &[u8], _other: &[u8], keep: f64) -> Vec<u8> {
+    let keep = keep.clamp(0.0, 1.0);
+    src.iter()
+        .map(|b| ((*b as f64) * keep).round() as u8)
+        .collect()
 }
 
 pub fn frame_index(t: f64, fps: f64) -> u32 {
@@ -232,12 +297,18 @@ impl EncodeBackend for FrameIntra {
     }
 
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
-        let _ = (req.left, req.right, req.dest);
+        if req.action.transition.eq_ignore_ascii_case("fade") {
+            let left = IntraSeq::decode(req.left)?;
+            let right = IntraSeq::decode(req.right)?;
+            return Ok(
+                IntraSeq::fade_join(&left, &right, req.action.duration_frames as usize)?.encode(),
+            );
+        }
         if req.action.noop {
             return Ok(Vec::new());
         }
         Err(EncodeError::Invalid(
-            "FrameIntra kerf is a no-op; Long-GOP is a later backend".into(),
+            "FrameIntra cut kerf is a no-op splice; fade is the filled intra kerf".into(),
         ))
     }
 
@@ -245,6 +316,36 @@ impl EncodeBackend for FrameIntra {
         Err(EncodeError::Invalid(
             "graft-intra does not carry audio; use x264/ffmpeg".into(),
         ))
+    }
+
+    fn overlay_brand(
+        &self,
+        dest: &Dest,
+        picture: &[u8],
+        brand: &[u8],
+    ) -> Result<Vec<u8>, EncodeError> {
+        let mut pic = IntraSeq::decode(picture)?;
+        if pic.width != dest.width || pic.height != dest.height {
+            return Err(EncodeError::Invalid("overlay picture geometry".into()));
+        }
+        let logo = IntraSeq::decode(brand)?;
+        let stamp = logo
+            .frames
+            .first()
+            .cloned()
+            .ok_or_else(|| EncodeError::Invalid("brand material has no frames".into()))?;
+        if stamp.len() != pic.frame_bytes() {
+            return Err(EncodeError::Invalid(
+                "brand frame size must match dest".into(),
+            ));
+        }
+        for frame in &mut pic.frames {
+            for (i, px) in frame.iter_mut().enumerate() {
+                let mix = stamp[i];
+                *px = ((*px as u16 + mix as u16) / 2) as u8;
+            }
+        }
+        Ok(pic.encode())
     }
 }
 
@@ -261,7 +362,16 @@ impl ConcatBackend for FrameIntra {
             }
             let seq =
                 IntraSeq::decode(&part.bytes).map_err(|e| ConcatError::Invalid(e.to_string()))?;
-            seqs.push(seq);
+            let trimmed = seq
+                .trim_frames(
+                    part.trim_head_frames as usize,
+                    part.trim_tail_frames as usize,
+                )
+                .map_err(|e| ConcatError::Invalid(e.to_string()))?;
+            if trimmed.frames.is_empty() {
+                continue;
+            }
+            seqs.push(trimmed);
         }
         Ok(IntraSeq::concat_seqs(&seqs)?.encode())
     }
@@ -273,8 +383,8 @@ mod tests {
     use crate::pipeline::compile;
     use graft_cas::{Kind, Memory, Store};
     use graft_score::{
-        Binding, BindingLayer, Clock, Dest, Encoder, FrameRange, FrameRate, Layer, Role, Scion,
-        Score, Slot, TimedRange, Window, GRAFT_SCHEMA,
+        Binding, BindingLayer, Clock, Dest, Encoder, FrameRange, FrameRate, Join, Layer, Role,
+        Scion, Score, Slot, TimedRange, Window, GRAFT_SCHEMA,
     };
     use std::collections::BTreeMap;
 
@@ -331,6 +441,7 @@ mod tests {
             layers: vec![Layer::Base],
             dest_default: Some("9x16".into()),
             spill_threshold_frames: 4,
+            joins: Vec::new(),
         }
     }
 
@@ -554,5 +665,383 @@ mod tests {
             )
             .unwrap();
         assert_eq!(IntraSeq::decode(&hook_bytes).unwrap().frames.len(), 10);
+    }
+
+    #[test]
+    fn fade_hook_body_keeps_body_blob_and_changing_duration_misses_only_kerf() {
+        let mut score = intra_score();
+        score.joins = vec![Join {
+            left: "hook".into(),
+            right: "body".into(),
+            transition: "fade".into(),
+            duration_frames: 2,
+        }];
+        let dest = intra_dest();
+        let store = Memory::new();
+        let backend = FrameIntra;
+        let hook = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 2).encode())
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 25, 10).encode())
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 20).encode())
+            .unwrap();
+        let scion = {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook.as_str(), 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion, &store, &backend, &backend).unwrap();
+        assert!(first.encoded);
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let hook_body = first
+            .graph
+            .kerfs
+            .iter()
+            .find(|k| k.left == "hook" && k.right == "body")
+            .unwrap();
+        assert_eq!(hook_body.transition, "fade");
+        assert!(!hook_body.noop);
+        let kerf_bytes = store
+            .get_blob(
+                Kind::Kerf,
+                &store.get_action(&hook_body.key).unwrap().unwrap().blob,
+            )
+            .unwrap();
+        assert!(!kerf_bytes.is_empty());
+        assert_eq!(IntraSeq::decode(&kerf_bytes).unwrap().frames.len(), 4);
+
+        let hook_v2 = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 3).encode())
+            .unwrap();
+        let mut swap = scion.clone();
+        swap.layers[0]
+            .bindings
+            .insert("hook".into(), bind(hook_v2.as_str(), 0.0, 1.0));
+        let second = compile(&score, &swap, &store, &backend, &backend).unwrap();
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+
+        score.joins[0].duration_frames = 3;
+        let third = compile(&score, &swap, &store, &backend, &backend).unwrap();
+        assert_eq!(
+            third
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            third
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "hook")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            third
+                .plan
+                .kerfs
+                .iter()
+                .find(|k| k.join == ["hook", "body"])
+                .unwrap()
+                .cache,
+            "miss"
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+    }
+
+    #[test]
+    fn proof_slot_stays_hit_across_hook_swap() {
+        let mut score = intra_score();
+        score.slots.insert(
+            2,
+            Slot {
+                id: "proof".into(),
+                role: Role::Proof,
+                range: FrameRange::new(20, 10),
+                optional: false,
+                window: None,
+            },
+        );
+        score.clock.duration_frames = 40;
+        let dest = intra_dest();
+        let store = Memory::new();
+        let backend = FrameIntra;
+        let hook = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 2).encode())
+            .unwrap();
+        let hook2 = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 4).encode())
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 25, 10).encode())
+            .unwrap();
+        let proof = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 12).encode())
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 20).encode())
+            .unwrap();
+        let scion = |hook_id: &str| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook_id, 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("proof".into(), bind(proof.as_str(), 0.0, 1.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(hook.as_str()), &store, &backend, &backend).unwrap();
+        let proof_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "proof")
+            .unwrap()
+            .key
+            .clone();
+        let proof_blob = store.get_action(&proof_key).unwrap().unwrap().blob;
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let second = compile(&score, &scion(hook2.as_str()), &store, &backend, &backend).unwrap();
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "proof")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            store.get_action(&proof_key).unwrap().unwrap().blob,
+            proof_blob
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+    }
+
+    #[test]
+    fn captions_and_brand_do_not_recut_body() {
+        let mut score = intra_score();
+        score.slots.push(Slot {
+            id: "captions".into(),
+            role: Role::Captions,
+            range: FrameRange::new(0, 40),
+            optional: false,
+            window: None,
+        });
+        score.slots.push(Slot {
+            id: "brand".into(),
+            role: Role::Brand,
+            range: FrameRange::new(0, 40),
+            optional: false,
+            window: None,
+        });
+        let dest = intra_dest();
+        let store = Memory::new();
+        let backend = FrameIntra;
+        let hook = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 2).encode())
+            .unwrap();
+        let hook2 = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 9).encode())
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 25, 10).encode())
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 15, 20).encode())
+            .unwrap();
+        let captions = store
+            .put_blob(Kind::Material, b"WEBVTT\n\n00:00.000 --> 00:04.000\nHi\n")
+            .unwrap();
+        let captions2 = store
+            .put_blob(Kind::Material, b"WEBVTT\n\n00:00.000 --> 00:04.000\nBye\n")
+            .unwrap();
+        let brand = store
+            .put_blob(Kind::Material, &make_material(4, 4, 10.0, 4, 77).encode())
+            .unwrap();
+        let scion = |hook_id: &str, cap: &str| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook_id, 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            bindings.insert("captions".into(), bind(cap, 0.0, 4.0));
+            bindings.insert("brand".into(), bind(brand.as_str(), 0.0, 4.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(
+            &score,
+            &scion(hook.as_str(), captions.as_str()),
+            &store,
+            &backend,
+            &backend,
+        )
+        .unwrap();
+        assert_eq!(first.captions.len(), 1);
+        assert_eq!(first.plan.overlay_mix, Some("miss"));
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let cap_key = first.graph.captions[0].key.clone();
+        let cap_blob = store.get_action(&cap_key).unwrap().unwrap().blob;
+        let brand_material = first
+            .graph
+            .overlay_mix
+            .as_ref()
+            .unwrap()
+            .brand
+            .material
+            .clone();
+        let second = compile(
+            &score,
+            &scion(hook2.as_str(), captions.as_str()),
+            &store,
+            &backend,
+            &backend,
+        )
+        .unwrap();
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+        assert_eq!(store.get_action(&cap_key).unwrap().unwrap().blob, cap_blob);
+        assert_eq!(
+            second.graph.overlay_mix.as_ref().unwrap().brand.material,
+            brand_material
+        );
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        let third = compile(
+            &score,
+            &scion(hook2.as_str(), captions2.as_str()),
+            &store,
+            &backend,
+            &backend,
+        )
+        .unwrap();
+        assert_eq!(
+            third
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            third
+                .plan
+                .captions
+                .iter()
+                .find(|s| s.id == "captions")
+                .unwrap()
+                .cache,
+            "miss"
+        );
+        assert_ne!(
+            store
+                .get_action(&third.graph.captions[0].key)
+                .unwrap()
+                .unwrap()
+                .blob,
+            cap_blob
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
     }
 }

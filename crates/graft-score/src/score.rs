@@ -62,6 +62,30 @@ impl Slot {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Join {
+    pub left: String,
+    pub right: String,
+    pub transition: String,
+    pub duration_frames: u64,
+}
+
+impl Join {
+    pub fn cut(left: impl Into<String>, right: impl Into<String>) -> Self {
+        Self {
+            left: left.into(),
+            right: right.into(),
+            transition: "cut".into(),
+            duration_frames: 0,
+        }
+    }
+
+    pub fn is_fade(&self) -> bool {
+        self.transition == "fade"
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Score {
     pub graft: String,
     pub concept: String,
@@ -73,6 +97,8 @@ pub struct Score {
     pub dest_default: Option<String>,
     #[serde(default = "default_spill")]
     pub spill_threshold_frames: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joins: Vec<Join>,
 }
 
 impl Score {
@@ -126,7 +152,80 @@ impl Score {
                 "score must declare at least one spine slot (hook, body, proof, or cta)",
             ));
         }
+        self.validate_joins()?;
         Ok(())
+    }
+
+    fn validate_joins(&self) -> Result<(), Error> {
+        let spine: Vec<&str> = self
+            .spine()
+            .into_iter()
+            .map(|slot| slot.id.as_str())
+            .collect();
+        let mut seen = BTreeMap::new();
+        for join in &self.joins {
+            require_slot_id(&join.left)?;
+            require_slot_id(&join.right)?;
+            if seen
+                .insert((join.left.as_str(), join.right.as_str()), ())
+                .is_some()
+            {
+                return Err(Error::invalid(format!(
+                    "duplicate join {}→{}",
+                    join.left, join.right
+                )));
+            }
+            match join.transition.as_str() {
+                "cut" => {}
+                "fade" => {
+                    if join.duration_frames == 0 {
+                        return Err(Error::invalid(format!(
+                            r#"{{"error":"invalid_fade","left":"{}","right":"{}","reason":"duration_frames must be > 0"}}"#,
+                            join.left, join.right
+                        )));
+                    }
+                }
+                other => {
+                    return Err(Error::invalid(format!(
+                        r#"{{"error":"unknown_transition","transition":"{other}","left":"{}","right":"{}"}}"#,
+                        join.left, join.right
+                    )));
+                }
+            }
+            let Some(left_i) = spine.iter().position(|id| *id == join.left) else {
+                return Err(Error::invalid(format!(
+                    "join left {} is not a spine slot",
+                    join.left
+                )));
+            };
+            if spine.get(left_i + 1).copied() != Some(join.right.as_str()) {
+                return Err(Error::invalid(format!(
+                    "join {}→{} is not an adjacent spine pair",
+                    join.left, join.right
+                )));
+            }
+            if join.is_fade() {
+                let left = self.slot(&join.left).expect("join left checked");
+                let right = self.slot(&join.right).expect("join right checked");
+                if join.duration_frames >= left.range.duration
+                    || join.duration_frames >= right.range.duration
+                {
+                    return Err(Error::invalid(format!(
+                        r#"{{"error":"invalid_fade","left":"{}","right":"{}","reason":"duration_frames must be shorter than both slots"}}"#,
+                        join.left, join.right
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn join_between(&self, left: &str, right: &str) -> Join {
+        self.joins
+            .iter()
+            .find(|join| join.left == left && join.right == right)
+            .cloned()
+            .unwrap_or_else(|| Join::cut(left, right))
     }
 
     pub fn slot(&self, id: &str) -> Option<&Slot> {

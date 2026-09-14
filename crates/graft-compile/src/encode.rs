@@ -22,6 +22,31 @@ pub trait EncodeBackend {
     fn encode_audio(&self, req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError>;
 
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError>;
+
+    fn encode_captions(&self, material: &[u8]) -> Result<Vec<u8>, EncodeError> {
+        Ok(material.to_vec())
+    }
+
+    fn mix_audio(&self, dest: &Dest, parts: &[AudioMixPart<'_>]) -> Result<Vec<u8>, EncodeError> {
+        let _ = (dest, parts);
+        Err(EncodeError::Unimplemented)
+    }
+
+    fn overlay_brand(
+        &self,
+        dest: &Dest,
+        picture: &[u8],
+        brand: &[u8],
+    ) -> Result<Vec<u8>, EncodeError> {
+        let _ = (dest, picture, brand);
+        Err(EncodeError::Unimplemented)
+    }
+}
+
+pub struct AudioMixPart<'a> {
+    pub bytes: &'a [u8],
+    pub start_s: f64,
+    pub duration_s: f64,
 }
 
 pub struct AudioEncodeRequest<'a> {

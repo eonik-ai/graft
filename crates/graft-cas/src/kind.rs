@@ -13,6 +13,9 @@ pub enum Kind {
     AudioEncode,
     Kerf,
     Concat,
+    Captions,
+    AudioMix,
+    OverlayMix,
 }
 
 impl Kind {
@@ -23,6 +26,9 @@ impl Kind {
             Self::AudioEncode => "audio_encode",
             Self::Kerf => "kerf",
             Self::Concat => "concat",
+            Self::Captions => "captions",
+            Self::AudioMix => "audio_mix",
+            Self::OverlayMix => "overlay_mix",
         }
     }
 
@@ -33,6 +39,9 @@ impl Kind {
             "audio_encode" => Ok(Self::AudioEncode),
             "kerf" => Ok(Self::Kerf),
             "concat" => Ok(Self::Concat),
+            "captions" => Ok(Self::Captions),
+            "audio_mix" => Ok(Self::AudioMix),
+            "overlay_mix" => Ok(Self::OverlayMix),
             other => Err(Error::invalid(format!("unknown blob kind {other:?}"))),
         }
     }

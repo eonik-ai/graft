@@ -54,14 +54,16 @@ _[asciinema](https://github.com/asciinema/asciinema)로 녹화한 실제 로컬 
 - scion과 layer로 bind하고 가장 강한 layer 의견을 평탄화한다
 - 미디어를 병합하지 않고 의미 diff와 삼방 merge를 보여 준다
 - 이름이 있는 `hook`, `body`, `proof`, `cta` slot을 dest로 컴파일한다
+- `vo` / `bed`는 혼합 오디오, `captions`는 sidecar, `brand`는 그림 concat 위 overlay로 컴파일한다
+- 인접 slot_encode를 다시 쓰지 않고 score에 `fade` join을 이름을 붙인다
 - 동기화된 AAC를 따로 캐시하고 비디오 링크와 mux한다
 - 기록된 `params.speed`를 적용한다(setpts/atempo 또는 intra 리샘플). 인접한 깨끗한 slot은 더럽히지 않는다
 - 이음이 IDR에 맞지 않으면 Long-GOP kerf를 채운다. closed-GOP 파일 이음은 빈 kerf
 - 바뀐 hook을 다시 encode하고 바뀌지 않은 body는 bitstream copy한다
 - 선언된 창과 출고된 time map으로 `hook_rate`를 해석한다
 - 범위가 있는 OTIO 부분집합을 손실 보고서와 함께 export/import한다
-- decode와 composite로 선택한 scion을 미리 보고, 동기 오디오를 실는다
-- 누락 blob 발견과 함께 object-store 루트로 blob을 동기화한다
+- decode와 composite로 선택한 scion을 미리 보고, 동기 오디오와 overlay mix를 실는다
+- object-store 루트로 누락 blob 발견과 함께 동기화한다. remote compile은 없다.
 
 ## 하지 않는 일
 

@@ -55,6 +55,9 @@ La fuente de reproducción es [`landing.cast`](docs/assets/landing.cast)._
 - Hacer bind por scion y layer; aplanar las opiniones de la layer más fuerte
 - Mostrar diff semántico y merge a tres bandas sin mezclar media
 - Compilar slots con nombre `hook`, `body`, `proof` y `cta` a un dest
+- Compilar `vo` / `bed` como audio mezclado, `captions` como sidecar y
+  `brand` como overlay sobre el concat de imagen
+- Nombrar un join `fade` en el score sin reescribir los slot_encode adyacentes
 - Cachear AAC sincronizado por separado y muxearlo con el enlace de video
 - Aplicar `params.speed` registrado (setpts/atempo o resample intra) sin
   ensuciar slots limpios adyacentes
@@ -64,7 +67,9 @@ La fuente de reproducción es [`landing.cast`](docs/assets/landing.cast)._
 - Resolver `hook_rate` con la ventana declarada y el time map enviado
 - Exportar/importar un subconjunto OTIO acotado con un informe de pérdida
 - Previsualizar un scion por decode y composite, con audio sincronizado
-- Sincronizar blobs a una raíz object-store con descubrimiento de blobs faltantes
+  y mezcla de overlay
+- Sincronizar blobs a una raíz object-store con descubrimiento de
+  blobs faltantes. No hay compile remoto.
 
 ## Qué no puede hacer
 

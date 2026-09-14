@@ -9,7 +9,9 @@ build → time map → dest frames → slot_id
 ```
 
 Compile emits that map with dest ranges, source ranges, `scion`,
-`scion_hash`, and `build`. `graft signal` and `graft feedback ingest`
+`scion_hash`, and `build`. Entries include every **bound** slot, spine
+first, so a signal can address a `vo` or `captions` window. `hook_rate`
+still does not dirty `body`. `graft signal` and `graft feedback ingest`
 read only that artifact. A root `time-map.json` is a fixture, not
 sufficient provenance for a live workspace.
 

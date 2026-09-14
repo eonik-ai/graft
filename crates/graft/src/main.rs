@@ -252,10 +252,7 @@ fn run() -> Result<()> {
                 pix_fmt,
                 color,
                 encoder,
-            } => {
-                let dest_id = dest_id.unwrap_or_else(|| id.clone());
-                cmd::scion_create(dir, id, dest_id, dest, pix_fmt, color, encoder)
-            }
+            } => cmd::scion_create(dir, id, dest_id, dest, pix_fmt, color, encoder),
             ScionCommand::Fork { source, id } => cmd::scion_fork(dir, source, id),
             ScionCommand::List => cmd::scion_list(dir),
             ScionCommand::Show { id } => cmd::scion_show(dir, id),

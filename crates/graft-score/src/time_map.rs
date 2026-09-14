@@ -72,17 +72,27 @@ impl TimeMap {
             scion_hash: scion_hash.into(),
             dest_id: dest_id.into(),
             rate,
-            entries: score
-                .spine()
-                .into_iter()
-                .filter_map(|slot| {
-                    bindings.get(&slot.id).map(|binding| TimeMapEntry {
-                        dest: slot.range,
-                        source: binding.source,
-                        slot: slot.id.clone(),
+            entries: {
+                let mut slots: Vec<_> = score.slots.iter().collect();
+                slots.sort_by(|a, b| {
+                    a.role
+                        .is_spine()
+                        .cmp(&b.role.is_spine())
+                        .reverse()
+                        .then_with(|| a.start().cmp(&b.start()))
+                        .then_with(|| a.id.cmp(&b.id))
+                });
+                slots
+                    .into_iter()
+                    .filter_map(|slot| {
+                        bindings.get(&slot.id).map(|binding| TimeMapEntry {
+                            dest: slot.range,
+                            source: binding.source,
+                            slot: slot.id.clone(),
+                        })
                     })
-                })
-                .collect(),
+                    .collect()
+            },
         }
     }
 }

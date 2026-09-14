@@ -207,6 +207,15 @@ impl Binding {
                 .source
                 .validate(&format!("binding {slot_id}.audio.source"))?;
         }
+        if let Some(serde_json::Value::Object(map)) = &self.params {
+            for key in map.keys() {
+                if key != "speed" {
+                    return Err(Error::invalid(format!(
+                        r#"{{"error":"unknown_param","slot":"{slot_id}","param":"{key}"}}"#
+                    )));
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -369,5 +378,21 @@ mod tests {
         assert!(dest.validate().is_err());
         dest.id = "9x16".into();
         dest.validate().unwrap();
+    }
+
+    #[test]
+    fn binding_rejects_unknown_params() {
+        let binding = Binding {
+            material: format!("blake3:{:064x}", 1),
+            source: TimedRange {
+                rate: FrameRate::new(30, 1),
+                range: crate::FrameRange::new(0, 30),
+            },
+            params: Some(serde_json::json!({ "crop": "center" })),
+            audio: None,
+        };
+        let err = binding.validate("hook").unwrap_err().to_string();
+        assert!(err.contains("unknown_param"));
+        assert!(err.contains("crop"));
     }
 }

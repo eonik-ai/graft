@@ -18,6 +18,8 @@ pub struct DirtySet {
     pub slots: Vec<String>,
     pub kerfs: Vec<Vec<String>>,
     pub clean: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mixes: Vec<String>,
     pub warnings: Vec<String>,
 }
 
@@ -111,6 +113,21 @@ pub fn dirty_from_signal_range(
         .collect();
     extra.sort();
     slots.extend(extra);
+    let mut mixes = Vec::new();
+    for id in &slots {
+        if let Some(slot) = score.slot(id) {
+            let mix = match slot.role {
+                Role::Vo | Role::Bed => Some("audio_mix"),
+                Role::Brand => Some("overlay_mix"),
+                _ => None,
+            };
+            if let Some(name) = mix {
+                if !mixes.iter().any(|m| m == name) {
+                    mixes.push(name.into());
+                }
+            }
+        }
+    }
     DirtySet {
         graft: graft_score::GRAFT_SCHEMA.into(),
         signal: Signal {
@@ -121,6 +138,7 @@ pub fn dirty_from_signal_range(
         slots,
         kerfs,
         clean,
+        mixes,
         warnings,
     }
 }
@@ -166,5 +184,41 @@ mod tests {
         );
         assert_eq!(got.slots, vec!["body"]);
         assert_eq!(got.clean, vec!["hook", "cta"]);
+    }
+
+    #[test]
+    fn vo_window_dirties_vo_and_audio_mix_not_body() {
+        let dir = example_dir();
+        let mut score = load_score(&dir.join("score.json")).unwrap();
+        score.slots.push(graft_score::Slot {
+            id: "vo".into(),
+            role: Role::Vo,
+            range: FrameRange::new(0, 90),
+            optional: false,
+            window: Some(graft_score::Window {
+                kind: "vo_hold".into(),
+                range: FrameRange::new(0, 90),
+            }),
+        });
+        let mut time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        time_map.entries.push(graft_score::TimeMapEntry {
+            dest: FrameRange::new(0, 90),
+            source: graft_score::TimedRange {
+                rate: time_map.rate,
+                range: FrameRange::new(0, 90),
+            },
+            slot: "vo".into(),
+        });
+        let got = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "vo_hold",
+            FrameRange::new(0, 30),
+            Some("9x16".into()),
+        );
+        assert!(got.slots.contains(&"vo".to_string()));
+        assert_eq!(got.mixes, vec!["audio_mix"]);
+        assert!(!got.slots.contains(&"body".to_string()));
+        assert!(got.clean.contains(&"body".to_string()));
     }
 }

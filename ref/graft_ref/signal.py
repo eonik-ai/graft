@@ -74,10 +74,18 @@ def dirty_from_signal(
     clean = [slot["id"] for slot in spine if slot["id"] not in dirty]
     ordered = [slot["id"] for slot in spine if slot["id"] in dirty]
     ordered.extend(sorted(dirty - set(ordered)))
+    mixes: list[str] = []
+    for slot_id in ordered:
+        role = by_id.get(slot_id, {}).get("role")
+        if role in {"vo", "bed"} and "audio_mix" not in mixes:
+            mixes.append("audio_mix")
+        if role == "brand" and "overlay_mix" not in mixes:
+            mixes.append("overlay_mix")
     return {
         "range": addressed,
         "slots": ordered,
         "kerfs": kerfs,
         "clean": clean,
+        "mixes": mixes,
         "warnings": warnings,
     }

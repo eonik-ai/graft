@@ -45,23 +45,28 @@ deterministic across machines.
 
 ```
 kerf := H(
-  left.slot_encode | right.slot_encode | transition | dest | encoder
+  left.slot_encode | right.slot_encode | transition | duration_frames | dest | encoder
 )
 ```
 
-`transition` is `cut` or a named fade. Kerf output is the re-encoded
-GOPs that straddle the join (typically one GOP each side for Long-GOP).
-Intra / matching `stsd`: kerf is a no-op splice (empty artifact, still
-a node).
+`transition` is `cut` or `fade` from optional `score.joins`. Missing join
+is `cut`. Fade is a sequential fade-out / fade-in of `duration_frames` on
+each side (kerf is `2 * duration_frames`). Concat trims that many frames
+from the adjacent slot encodes so dest duration still matches the score
+clock. Changing only the fade dirties that kerf and concat, not adjacent
+`slot_encode` blobs. Intra / matching `stsd` cut: kerf is a no-op splice
+(empty artifact, still a node).
 
 ### scion hash
 
 ```
-scion_hash := H( ordered slot_encode[] | audio_encode[] | kerf[] | dest )
+scion_hash := H( ordered slot_encode[] | audio_encode[] | kerf[] | captions[] | audio_mix | brand | dest )
 ```
 
 `audio_encode` is independent: slot id, material, source, AAC 48kHz stereo,
-and encoder toolchain. Video-only scions omit it.
+and encoder toolchain. Video-only scions omit it. `vo`/`bed` are overlay
+audio encodes mixed after spine AAC. `captions` is a sidecar. `brand` is
+an `overlay_mix` on the picture concat.
 
 The time map is a **build artifact** keyed by `scion_hash` (dest clock).
 It is not an identity derived only for the CLI.
@@ -84,7 +89,10 @@ Schedule:
 1. Recompute each `slot_encode` key. Miss → encode that slot.
 2. For each adjacent pair, recompute `kerf`. Miss if the key is new
    (either side’s `slot_encode` changed, or transition changed).
-3. Concat: miss if `scion_hash` is new. Copy cached slot_encode / kerf
+3. Overlay: `vo`/`bed` `audio_encode`, `captions`, `audio_mix`,
+   `overlay_mix`. A caption or brand miss does not recut a clean body
+   `slot_encode`.
+4. Concat: miss if `scion_hash` is new. Copy cached slot_encode / kerf
    blobs; encode only misses.
 
 Retiming a slot (speed ≠ 1, or span length change) invalidates that
@@ -98,7 +106,7 @@ stay locked. Feedback still does not invent a speed.
 | Working format | Independent unit | Replace hook | Retime ("too slow") |
 | --- | --- | --- | --- |
 | Image seq / DPX / EXR / JPEG2000 / `graft-intra` | frame | those frames | new essence for the slot |
-| ProRes / DNxHR / All-I | frame | sample-accurate splice if `stsd` matches | re-encode that slot |
+| ProRes / DNxHR / All-I | frame | grain-table intent (`stsd` splice is not implemented) | re-encode that slot |
 | H.264/HEVC/AV1 Long-GOP | GOP / IDR (~0.5–2s) | hook GOPs + kerf | full slot re-encode |
 | HLS / CMAF | segment aligned to GOP | replace hook segments | new segments + playlist |
 

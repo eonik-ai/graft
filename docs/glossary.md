@@ -11,7 +11,7 @@ Always lowercase **graft** for the project and the command, like **git**.
 | **window** | Declared metric span on a slot (e.g. hook_rate `[0, 3)`). May differ from the take's duration. |
 | **material** | Immutable essence. CAS hash of original bytes. |
 | **binding** | `slot_id → { material, in, out, params }`. What a variant swaps. |
-| **params** | Crop, speed, grade ref, volume — anything that changes the encode of that slot. |
+| **params** | `speed` is applied at encode. Other keys are reserved and rejected. |
 | **layer** | USD-like opinion: `base` \| `copy` \| `grade` \| `legal`. Strength, not a pixel merge. |
 | **dest** | Output spec: size, fps, color, encoder fingerprint. `9x16` is a dest. |
 | **scion** | A named variant: concept + bindings + dest. Example: `hook_v3 + body_v1 + cta_v1 @ 9x16`. |

@@ -50,6 +50,14 @@ pub struct CompilePlan {
     pub kerfs: Vec<KerfPlan>,
     pub concat: Vec<String>,
     pub concat_cache: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub overlay_audio: Vec<SlotPlan>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub captions: Vec<SlotPlan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_mix: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overlay_mix: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_overlay: Option<PrevOverlay>,
 }
@@ -106,6 +114,28 @@ pub fn plan_from_schedule(graph: &ActionGraph, schedule: &Schedule, encode: bool
         kerfs,
         concat,
         concat_cache: schedule.concat.cache.as_str(),
+        overlay_audio: schedule
+            .overlay_audio
+            .iter()
+            .map(|s| SlotPlan {
+                id: s.action.slot.id.clone(),
+                cache: s.cache.as_str(),
+                slot_encode: s.action.key.hex().to_string(),
+                blob: s.cache.blob().map(|b| b.to_string()),
+            })
+            .collect(),
+        captions: schedule
+            .captions
+            .iter()
+            .map(|s| SlotPlan {
+                id: s.action.slot.id.clone(),
+                cache: s.cache.as_str(),
+                slot_encode: s.action.key.hex().to_string(),
+                blob: s.cache.blob().map(|b| b.to_string()),
+            })
+            .collect(),
+        audio_mix: schedule.audio_mix.as_ref().map(|m| m.cache.as_str()),
+        overlay_mix: schedule.overlay_mix.as_ref().map(|m| m.cache.as_str()),
         prev_overlay: None,
     }
 }

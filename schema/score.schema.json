@@ -34,7 +34,11 @@
       "items": { "enum": ["base", "copy", "grade", "legal"] }
     },
     "dest_default": { "type": "string", "minLength": 1 },
-    "spill_threshold_frames": { "type": "integer", "minimum": 0, "default": 11 }
+    "spill_threshold_frames": { "type": "integer", "minimum": 0, "default": 11 },
+    "joins": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/join" }
+    }
   },
   "$defs": {
     "rate": {
@@ -53,6 +57,17 @@
       "properties": {
         "start": { "type": "integer", "minimum": 0 },
         "duration": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "join": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right", "transition", "duration_frames"],
+      "properties": {
+        "left": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "right": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "transition": { "enum": ["cut", "fade"] },
+        "duration_frames": { "type": "integer", "minimum": 0 }
       }
     },
     "slot": {

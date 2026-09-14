@@ -67,6 +67,19 @@ variant derivation, not Git history.
 }
 ```
 
+Optional `score.joins[]` names a `cut` or `fade` between adjacent spine
+slots (`left`, `right`, `transition`, `duration_frames`). Missing join is
+`cut`.
+
+`dest_default` is a dest id hint (`"9x16"`). `graft scion create` uses it
+when `--dest-id` is omitted. It is not geometry; `--dest WxH` stays
+required.
+
+`encoder.level` is passed to ffmpeg as `-level:v`. `rate_control.mode =
+bitrate` uses `-b:v`. The encoder fingerprint lives on `scion.dest`, so
+changing level or bitrate misses every `slot_encode` for that dest.
+Other `params` keys besides `speed` are rejected.
+
 Source duration at `params.speed` must match the slot's dest duration
 (one-frame tolerance). Speed ≠ 1 invalidates that slot's action key and
 is applied at encode (`graft-intra` frame resample; ffmpeg `setpts` /

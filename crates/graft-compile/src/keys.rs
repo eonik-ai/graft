@@ -36,15 +36,53 @@ pub fn audio_encode_key(slot: &Slot, binding: &AudioBinding, speed: f64, dest: &
     }))
 }
 
-pub fn kerf_key(left: &ActionKey, right: &ActionKey, transition: &str, dest: &Dest) -> ActionKey {
+pub fn kerf_key(
+    left: &ActionKey,
+    right: &ActionKey,
+    transition: &str,
+    duration_frames: u64,
+    dest: &Dest,
+) -> ActionKey {
     let value = json!({
         "left": left.hex(),
         "right": right.hex(),
         "transition": transition,
+        "duration_frames": duration_frames,
         "dest": dest.fingerprint_value(),
         "encoder": dest.encoder_value(),
     });
     ActionKey::from_canonical(&value)
+}
+
+pub fn captions_key(slot: &Slot, binding: &Binding, dest: &Dest) -> ActionKey {
+    ActionKey::from_canonical(&json!({
+        "action": "captions",
+        "slot": slot.id,
+        "material": binding.material,
+        "source": binding.source,
+        "dest": dest.fingerprint_value(),
+    }))
+}
+
+pub fn audio_mix_key(audio_keys: &[ActionKey], dest: &Dest) -> ActionKey {
+    let audio: Vec<&str> = audio_keys.iter().map(ActionKey::hex).collect();
+    ActionKey::from_canonical(&json!({
+        "action": "audio_mix",
+        "audio_encode": audio,
+        "dest": dest.fingerprint_value(),
+        "sample_rate": 48000,
+        "channels": 2,
+    }))
+}
+
+pub fn overlay_mix_key(picture: &ActionKey, brand: &ActionKey, dest: &Dest) -> ActionKey {
+    ActionKey::from_canonical(&json!({
+        "action": "overlay_mix",
+        "picture": picture.hex(),
+        "brand": brand.hex(),
+        "dest": dest.fingerprint_value(),
+        "encoder": dest.encoder_value(),
+    }))
 }
 
 pub fn scion_hash(
@@ -52,16 +90,22 @@ pub fn scion_hash(
     slot_keys: &[ActionKey],
     audio_keys: &[ActionKey],
     kerf_keys: &[ActionKey],
+    extra: &Value,
 ) -> ActionKey {
     let slots: Vec<&str> = slot_keys.iter().map(ActionKey::hex).collect();
     let kerfs: Vec<&str> = kerf_keys.iter().map(ActionKey::hex).collect();
     let audio: Vec<&str> = audio_keys.iter().map(ActionKey::hex).collect();
-    let value = json!({
+    let mut value = json!({
         "slot_encode": slots,
         "audio_encode": audio,
         "kerf": kerfs,
         "dest": scion.dest.fingerprint_value(),
     });
+    if let (Some(obj), Some(extra)) = (value.as_object_mut(), extra.as_object()) {
+        for (key, item) in extra {
+            obj.insert(key.clone(), item.clone());
+        }
+    }
     ActionKey::from_canonical(&value)
 }
 

@@ -267,6 +267,7 @@ mod tests {
             layers: vec![Layer::Base, Layer::Legal],
             dest_default: Some("9x16".into()),
             spill_threshold_frames: 11,
+            joins: Vec::new(),
         }
     }
 

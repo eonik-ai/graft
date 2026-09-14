@@ -54,6 +54,10 @@ Die Wiedergabequelle ist [`landing.cast`](docs/assets/landing.cast)._
 - Nach scion und layer binden; die stärksten Layer-Meinungen flachlegen
 - Semantischen diff und Drei-Wege-merge ohne Medien-Merge zeigen
 - Benannte `hook`-, `body`-, `proof`- und `cta`-slots zu einem dest compilieren
+- `vo` / `bed` als gemischtes Audio, `captions` als Sidecar und `brand` als
+  Overlay auf dem Bild-concat compilieren
+- Ein `fade`-join auf dem score benennen, ohne benachbarte slot_encode neu
+  zu schreiben
 - Synchrones AAC getrennt cachen und mit dem Videolink muxen
 - Aufgezeichnetes `params.speed` anwenden (setpts/atempo oder intra-Resample),
   ohne benachbarte saubere slots dirty zu machen
@@ -63,7 +67,9 @@ Die Wiedergabequelle ist [`landing.cast`](docs/assets/landing.cast)._
 - `hook_rate` über das deklarierte Fenster und die ausgelieferte time map auflösen
 - Eine begrenzte OTIO-Teilmenge mit Verlustbericht exportieren/importieren
 - Einen gewählten scion per Decode und Composite previewen, mit Sync-Audio
-- Blobs zu einer object-store-Wurzel mit Missing-Blob-Entdeckung synchronisieren
+  und Overlay-Mix
+- Blobs zu einer object-store-Wurzel mit Missing-Blob-Entdeckung
+  synchronisieren. Es gibt kein Remote-compile.
 
 ## Was es nicht kann
 

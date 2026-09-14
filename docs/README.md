@@ -18,4 +18,4 @@ The machine contract is [`../schema`](../schema/).
 | [brand/](brand/) | Mark: two clips, one join |
 | [TRANSLATING.md](TRANSLATING.md) | README locales; English is canonical |
 | [adr/](adr/) | Decisions already made |
-| [rfc/](rfc/) | Contract changes. RFC 0001 is accepted (`0.2.0`). |
+| [rfc/](rfc/) | Contract changes. RFC 0001 and RFC 0002 are accepted (`0.2.0`). |
