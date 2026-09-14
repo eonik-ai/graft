@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "graft"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "graft-cas"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "graft-score",
  "hex",
@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "graft-compile"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "graft-cas",
  "graft-score",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "graft-otio"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "graft-score",
  "serde_json",
@@ -361,7 +361,7 @@ dependencies = [
 
 [[package]]
 name = "graft-score"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "serde",
