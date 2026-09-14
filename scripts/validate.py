@@ -105,6 +105,18 @@ def main() -> int:
         if dirty.exists():
             load_json(dirty)
             print(f"ok example {dirty.relative_to(REPO)}")
+        for extra_dirty in sorted(example.glob("dirty-*.json")):
+            load_json(extra_dirty)
+            print(f"ok example {extra_dirty.relative_to(REPO)}")
+        scions_dir = example / "scions"
+        if scions_dir.is_dir():
+            for path in sorted(scions_dir.glob("*.json")):
+                doc = load_json(path)
+                if not isinstance(doc, dict):
+                    raise SystemExit(f"{path}: expected object")
+                structural_scion(doc, path)
+                maybe_jsonschema(SCHEMA / "scion.schema.json", doc, path)
+                print(f"ok example {path.relative_to(REPO)}")
     return 0
 
 

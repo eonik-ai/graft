@@ -1,0 +1,50 @@
+{
+  "graft": "0.2.0",
+  "build": "abababababababababababababababababababababababababababababababab",
+  "scion": "dub-en",
+  "scion_hash": "abababababababababababababababababababababababababababababababab",
+  "dest_id": "9x16",
+  "rate": { "num": 30, "den": 1 },
+  "entries": [
+    {
+      "dest": { "start": 0, "duration": 90 },
+      "source": {
+        "rate": { "num": 24, "den": 1 },
+        "range": { "start": 0, "duration": 72 }
+      },
+      "slot": "hook"
+    },
+    {
+      "dest": { "start": 90, "duration": 120 },
+      "source": {
+        "rate": { "num": 24, "den": 1 },
+        "range": { "start": 0, "duration": 96 }
+      },
+      "slot": "body"
+    },
+    {
+      "dest": { "start": 210, "duration": 90 },
+      "source": {
+        "rate": { "num": 24, "den": 1 },
+        "range": { "start": 0, "duration": 72 }
+      },
+      "slot": "cta"
+    },
+    {
+      "dest": { "start": 0, "duration": 300 },
+      "source": {
+        "rate": { "num": 30, "den": 1 },
+        "range": { "start": 0, "duration": 300 }
+      },
+      "slot": "captions"
+    },
+    {
+      "dest": { "start": 0, "duration": 300 },
+      "source": {
+        "rate": { "num": 30, "den": 1 },
+        "range": { "start": 0, "duration": 300 }
+      },
+      "slot": "vo"
+    }
+  ]
+}

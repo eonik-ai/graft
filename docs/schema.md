@@ -103,3 +103,8 @@ See [`examples/hook-v3-body-v1-9x16/`](../examples/hook-v3-body-v1-9x16/).
 That fixture is part of the contract: `make test` requires that
 `hook_rate` on the declared `[0, 90)` window dirties hook + hook→body
 kerf only.
+
+See [`examples/dub-en-9x16/`](../examples/dub-en-9x16/) for the same dest
+axis with overlapping `vo`/`captions`, inherited picture scions, and the
+`vo_hold` / 3–5s `note` / `hold` dirty sets. Material ids there are
+BLAKE3 of local Veo and MyWonder files; essence is not in git.

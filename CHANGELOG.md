@@ -9,6 +9,15 @@ crates.io is not published (`publish = false`).
 
 ## [Unreleased]
 
+### Added
+
+- Worked example [`examples/dub-en-9x16/`](examples/dub-en-9x16/): 10s
+  clock cut from real Veo clips with inherited `picture` / `dub-en` /
+  `dub-hi` scions. `vo_hold` dirties `vo` + `audio_mix`, not `body`.
+  Explicit dest `note` at 3–5s and `hold` name overlapping body. Iterate
+  still does not invent `params.speed`. Bindings are BLAKE3 of local
+  essence; mp4s stay out of git.
+
 ## [0.2.1] - 2026-09-14
 
 Compiler tag after the founding loop. Schema format id stays `0.2.0`.

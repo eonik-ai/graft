@@ -1,0 +1,45 @@
+{
+  "graft": "0.2.0",
+  "id": "dub-hi",
+  "concept": "7c3e9f21-4b8a-4d16-9e02-5f1a8c6b0d47",
+  "parent": "picture",
+  "dest": {
+    "id": "9x16",
+    "width": 720,
+    "height": 1280,
+    "rate": { "num": 30, "den": 1 },
+    "pix_fmt": "yuv420p",
+    "color": "bt709",
+    "encoder": {
+      "impl": "x264",
+      "version": "r3222",
+      "profile": "high",
+      "level": "4.1",
+      "rate_control": { "mode": "crf", "crf": 18 },
+      "preset": "medium",
+      "keyint": 30,
+      "sc_threshold": 0
+    }
+  },
+  "layers": [
+    {
+      "name": "copy",
+      "bindings": {
+        "vo": {
+          "material": "blake3:7c1f31381386032c665014bab614fb62ca5e17747c3b78b6d3c608d5b7c8307b",
+          "source": {
+            "rate": { "num": 30, "den": 1 },
+            "range": { "start": 0, "duration": 300 }
+          },
+          "audio": {
+            "material": "blake3:7c1f31381386032c665014bab614fb62ca5e17747c3b78b6d3c608d5b7c8307b",
+            "source": {
+              "rate": { "num": 30, "den": 1 },
+              "range": { "start": 0, "duration": 300 }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

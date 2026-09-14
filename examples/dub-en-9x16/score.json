@@ -1,0 +1,59 @@
+{
+  "graft": "0.2.0",
+  "concept": "7c3e9f21-4b8a-4d16-9e02-5f1a8c6b0d47",
+  "clock": {
+    "rate": { "num": 30, "den": 1 },
+    "duration_frames": 300
+  },
+  "slots": [
+    {
+      "id": "hook",
+      "role": "hook",
+      "range": { "start": 0, "duration": 90 },
+      "window": {
+        "kind": "hook_rate",
+        "range": { "start": 0, "duration": 90 }
+      }
+    },
+    {
+      "id": "body",
+      "role": "body",
+      "range": { "start": 90, "duration": 120 },
+      "window": {
+        "kind": "hold",
+        "range": { "start": 90, "duration": 120 }
+      }
+    },
+    {
+      "id": "cta",
+      "role": "cta",
+      "range": { "start": 210, "duration": 90 },
+      "optional": true
+    },
+    {
+      "id": "vo",
+      "role": "vo",
+      "range": { "start": 0, "duration": 300 },
+      "optional": true,
+      "window": {
+        "kind": "vo_hold",
+        "range": { "start": 0, "duration": 90 }
+      }
+    },
+    {
+      "id": "captions",
+      "role": "captions",
+      "range": { "start": 0, "duration": 300 },
+      "optional": true
+    },
+    {
+      "id": "bed",
+      "role": "bed",
+      "range": { "start": 0, "duration": 300 },
+      "optional": true
+    }
+  ],
+  "layers": ["base", "copy", "grade", "legal"],
+  "dest_default": "9x16",
+  "spill_threshold_frames": 11
+}

@@ -1,0 +1,13 @@
+{
+  "graft": "0.2.0",
+  "signal": {
+    "kind": "note",
+    "range": { "start": 210, "duration": 90 },
+    "dest_id": "9x16"
+  },
+  "slots": ["cta", "captions", "vo"],
+  "kerfs": [["body", "cta"]],
+  "clean": ["hook", "body"],
+  "mixes": ["audio_mix"],
+  "warnings": []
+}

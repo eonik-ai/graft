@@ -221,4 +221,306 @@ mod tests {
         assert!(!got.slots.contains(&"body".to_string()));
         assert!(got.clean.contains(&"body".to_string()));
     }
+
+    fn dub_example_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/dub-en-9x16")
+    }
+
+    #[test]
+    fn dub_vo_hold_dirties_vo_and_audio_mix_not_body() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let got = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "vo_hold",
+            FrameRange::new(0, 30),
+            Some("9x16".into()),
+        );
+        assert_eq!(got.signal.range, FrameRange::new(0, 90));
+        assert!(got.slots.contains(&"vo".to_string()));
+        assert_eq!(got.mixes, vec!["audio_mix"]);
+        assert!(!got.slots.contains(&"body".to_string()));
+        assert!(got.clean.contains(&"body".to_string()));
+        assert_eq!(
+            got.slots,
+            vec!["hook".to_string(), "captions".to_string(), "vo".to_string()]
+        );
+    }
+
+    #[test]
+    fn explicit_dest_range_3_to_5s_names_overlapping_body_and_vo() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let got = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(90, 60),
+            Some("9x16".into()),
+        );
+        assert_eq!(got.signal.range, FrameRange::new(90, 60));
+        assert!(got.slots.contains(&"body".to_string()));
+        assert!(got.slots.contains(&"vo".to_string()));
+        assert_eq!(got.mixes, vec!["audio_mix"]);
+        assert_eq!(got.clean, vec!["hook".to_string(), "cta".to_string()]);
+    }
+
+    #[test]
+    fn hold_on_body_uses_declared_window_and_does_not_invent_speed() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let got = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "hold",
+            FrameRange::new(90, 30),
+            Some("9x16".into()),
+        );
+        assert_eq!(got.signal.range, FrameRange::new(90, 120));
+        assert!(got.slots.contains(&"body".to_string()));
+        let encoded = serde_json::to_string(&got).unwrap();
+        assert!(!encoded.contains("speed"));
+        assert_eq!(got.mixes, vec!["audio_mix"]);
+    }
+
+    fn load_dirty(name: &str) -> DirtySet {
+        let path = dub_example_dir().join(name);
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn assert_dirty_matches(got: &DirtySet, expected: &DirtySet) {
+        assert_eq!(got.signal.kind, expected.signal.kind);
+        assert_eq!(got.signal.range, expected.signal.range);
+        assert_eq!(got.slots, expected.slots);
+        assert_eq!(got.kerfs, expected.kerfs);
+        assert_eq!(got.clean, expected.clean);
+        assert_eq!(got.mixes, expected.mixes);
+    }
+
+    #[test]
+    fn dub_note_permutation_fixtures() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let cases = [
+            ("note", FrameRange::new(0, 90), "dirty-note-0-3.json"),
+            ("note", FrameRange::new(90, 60), "dirty-note.json"),
+            ("note", FrameRange::new(150, 30), "dirty-note-5-6.json"),
+            ("note", FrameRange::new(210, 90), "dirty-note-7-10.json"),
+            (
+                "note",
+                FrameRange::new(75, 30),
+                "dirty-note-join-hook-body.json",
+            ),
+            (
+                "note",
+                FrameRange::new(207, 6),
+                "dirty-note-join-body-cta.json",
+            ),
+            ("note", FrameRange::new(0, 300), "dirty-note-full.json"),
+            ("note", FrameRange::new(360, 30), "dirty-note-past.json"),
+            ("note", FrameRange::new(89, 1), "dirty-note-frame-89.json"),
+            ("note", FrameRange::new(90, 1), "dirty-note-frame-90.json"),
+        ];
+        for (kind, requested, file) in cases {
+            let expected = load_dirty(file);
+            let got =
+                dirty_from_signal_range(&time_map, &score, kind, requested, Some("9x16".into()));
+            assert_eq!(got.signal.range, requested, "{file}");
+            assert_dirty_matches(&got, &expected);
+            assert!(!got.slots.iter().any(|s| s == "bed"), "{file}");
+            assert!(!serde_json::to_string(&got).unwrap().contains("speed"));
+        }
+    }
+
+    #[test]
+    fn dub_declared_windows_ignore_every_requested_range() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let vo_hold = load_dirty("dirty.json");
+        let hold = load_dirty("dirty-hold.json");
+        let hook_rate = load_dirty("dirty-hook-rate.json");
+        for start in 0..300 {
+            let requested = FrameRange::new(start, 1);
+            let got_vo = dirty_from_signal_range(
+                &time_map,
+                &score,
+                "vo_hold",
+                requested,
+                Some("9x16".into()),
+            );
+            assert_dirty_matches(&got_vo, &vo_hold);
+            assert!(!got_vo.slots.contains(&"body".to_string()));
+            let got_hold =
+                dirty_from_signal_range(&time_map, &score, "hold", requested, Some("9x16".into()));
+            assert_dirty_matches(&got_hold, &hold);
+            assert!(got_hold.slots.contains(&"body".to_string()));
+            let got_hook = dirty_from_signal_range(
+                &time_map,
+                &score,
+                "hook_rate",
+                requested,
+                Some("9x16".into()),
+            );
+            assert_eq!(got_hook.slots, hook_rate.slots);
+            assert_eq!(got_hook.kerfs, hook_rate.kerfs);
+            assert_eq!(got_hook.clean, hook_rate.clean);
+            assert_eq!(got_hook.mixes, hook_rate.mixes);
+            assert_eq!(got_hook.signal.range, hook_rate.signal.range);
+            assert!(!got_hook.slots.contains(&"body".to_string()));
+        }
+    }
+
+    #[test]
+    fn dub_note_every_dest_frame_matches_time_map_overlap() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        for start in 0..300 {
+            let requested = FrameRange::new(start, 1);
+            let got =
+                dirty_from_signal_range(&time_map, &score, "note", requested, Some("9x16".into()));
+            let overlap: std::collections::BTreeSet<String> = time_map
+                .entries
+                .iter()
+                .filter(|entry| entry.dest.overlap_frames(requested) > 0)
+                .map(|entry| entry.slot.clone())
+                .collect();
+            assert_eq!(
+                got.slots
+                    .iter()
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>(),
+                overlap,
+                "frame {start}"
+            );
+            assert_eq!(got.signal.range, requested);
+            assert!(!got.slots.iter().any(|s| s == "bed"));
+            if overlap.contains("vo") {
+                assert_eq!(got.mixes, vec!["audio_mix".to_string()]);
+            } else {
+                assert!(got.mixes.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn picture_time_map_without_vo_never_names_vo() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let mut time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        time_map.entries.retain(|entry| entry.slot != "vo");
+        let vo_hold = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "vo_hold",
+            FrameRange::new(0, 1),
+            Some("9x16".into()),
+        );
+        assert_eq!(
+            vo_hold.slots,
+            vec!["hook".to_string(), "captions".to_string()]
+        );
+        assert!(vo_hold.mixes.is_empty());
+        assert!(!vo_hold.slots.contains(&"vo".to_string()));
+        assert!(!vo_hold.slots.contains(&"body".to_string()));
+        let note = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(90, 60),
+            Some("9x16".into()),
+        );
+        assert_eq!(note.slots, vec!["body".to_string(), "captions".to_string()]);
+        assert!(note.mixes.is_empty());
+        let hold = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "hold",
+            FrameRange::new(0, 1),
+            Some("9x16".into()),
+        );
+        assert_eq!(hold.slots, vec!["body".to_string(), "captions".to_string()]);
+        assert!(hold.slots.contains(&"body".to_string()));
+        for start in 0..300 {
+            let requested = FrameRange::new(start, 1);
+            let note =
+                dirty_from_signal_range(&time_map, &score, "note", requested, Some("9x16".into()));
+            assert!(!note.slots.contains(&"vo".to_string()), "note {start}");
+            assert!(!note.slots.contains(&"bed".to_string()), "note {start}");
+            assert!(note.mixes.is_empty(), "note {start}");
+            let got_vo = dirty_from_signal_range(
+                &time_map,
+                &score,
+                "vo_hold",
+                requested,
+                Some("9x16".into()),
+            );
+            assert_eq!(got_vo.slots, vo_hold.slots);
+            assert!(got_vo.mixes.is_empty());
+            let got_hold =
+                dirty_from_signal_range(&time_map, &score, "hold", requested, Some("9x16".into()));
+            assert_eq!(got_hold.slots, hold.slots);
+            let got_hook = dirty_from_signal_range(
+                &time_map,
+                &score,
+                "hook_rate",
+                requested,
+                Some("9x16".into()),
+            );
+            assert_eq!(
+                got_hook.slots,
+                vec!["hook".to_string(), "captions".to_string()]
+            );
+            assert!(!got_hook.slots.contains(&"body".to_string()));
+        }
+    }
+
+    #[test]
+    fn join_frames_are_exclusive_at_90_and_210() {
+        let dir = dub_example_dir();
+        let score = load_score(&dir.join("score.json")).unwrap();
+        let time_map = load_time_map(&dir.join("time-map.json")).unwrap();
+        let at_89 = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(89, 1),
+            Some("9x16".into()),
+        );
+        let at_90 = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(90, 1),
+            Some("9x16".into()),
+        );
+        let at_209 = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(209, 1),
+            Some("9x16".into()),
+        );
+        let at_210 = dirty_from_signal_range(
+            &time_map,
+            &score,
+            "note",
+            FrameRange::new(210, 1),
+            Some("9x16".into()),
+        );
+        assert!(at_89.slots.contains(&"hook".to_string()));
+        assert!(!at_89.slots.contains(&"body".to_string()));
+        assert!(at_90.slots.contains(&"body".to_string()));
+        assert!(!at_90.slots.contains(&"hook".to_string()));
+        assert!(at_209.slots.contains(&"body".to_string()));
+        assert!(!at_209.slots.contains(&"cta".to_string()));
+        assert!(at_210.slots.contains(&"cta".to_string()));
+        assert!(!at_210.slots.contains(&"body".to_string()));
+    }
 }

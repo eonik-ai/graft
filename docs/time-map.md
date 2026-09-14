@@ -49,5 +49,23 @@ Current behavior: `graft signal --kind hook_rate --build <id>` → slots
 `{hook}`, kerfs `{hook→body}`. `body_v1` stays clean. A "too slow"
 signal still names the slot; iterate does not invent `params.speed`.
 
+## Overlay clock (10s @ 30fps, 9x16)
+
+[`examples/dub-en-9x16/`](../examples/dub-en-9x16/) cuts a 10s dest from
+real Veo clips (`clip_01`/`02`/`03`) plus a MyWonder take as `vo`. The
+score names hook `[0, 3)`, body `[3, 7)`, cta `[7, 10)`. `vo` and
+`captions` cover the whole dest. graft does not infer those names from
+the mp4.
+
+| Signal | Addressed dest | Dirty | Clean spine |
+| --- | --- | --- | --- |
+| `vo_hold` | declared `[0, 90)` | hook, captions, vo + `audio_mix` | **body**, cta |
+| `note` at 3–5s | explicit `[90, 150)` | body, captions, vo + `audio_mix` | hook, cta |
+| `hold` | declared body `[90, 210)` | body, captions, vo + `audio_mix` | hook, cta |
+
+A full-span `vo` overlapping the hook window is dirty for `hook_rate` on
+this clock. The load-bearing hook-only fixture remains
+[`examples/hook-v3-body-v1-9x16/`](../examples/hook-v3-body-v1-9x16/).
+
 Reference implementation: [`ref/graft_ref/signal.py`](../ref/graft_ref/signal.py).
 The test in `ref/tests/test_signal.py` is part of the spec.

@@ -48,7 +48,7 @@ def dirty_from_signal(
     warnings: list[str] = []
     if kind == "hook_rate":
         dirty.update(slot["id"] for slot in slots if slot.get("role") == "hook")
-        for slot_id in list(dirty):
+        for slot_id in sorted(dirty):
             slot = by_id[slot_id]
             if slot.get("role") == "hook":
                 continue

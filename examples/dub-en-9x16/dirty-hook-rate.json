@@ -1,0 +1,16 @@
+{
+  "graft": "0.2.0",
+  "signal": {
+    "kind": "hook_rate",
+    "range": { "start": 0, "duration": 90 },
+    "dest_id": "9x16"
+  },
+  "slots": ["hook", "captions", "vo"],
+  "kerfs": [["hook", "body"]],
+  "clean": ["body", "cta"],
+  "mixes": ["audio_mix"],
+  "warnings": [
+    "captions overlaps hook_rate window by 90 frames (>= spill_threshold_frames 11); pad hook to the declared window or accept a dirty body",
+    "vo overlaps hook_rate window by 90 frames (>= spill_threshold_frames 11); pad hook to the declared window or accept a dirty body"
+  ]
+}

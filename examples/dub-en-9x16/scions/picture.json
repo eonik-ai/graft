@@ -1,0 +1,82 @@
+{
+  "graft": "0.2.0",
+  "id": "picture",
+  "concept": "7c3e9f21-4b8a-4d16-9e02-5f1a8c6b0d47",
+  "dest": {
+    "id": "9x16",
+    "width": 720,
+    "height": 1280,
+    "rate": { "num": 30, "den": 1 },
+    "pix_fmt": "yuv420p",
+    "color": "bt709",
+    "encoder": {
+      "impl": "x264",
+      "version": "r3222",
+      "profile": "high",
+      "level": "4.1",
+      "rate_control": { "mode": "crf", "crf": 18 },
+      "preset": "medium",
+      "keyint": 30,
+      "sc_threshold": 0
+    }
+  },
+  "layers": [
+    {
+      "name": "base",
+      "bindings": {
+        "hook": {
+          "material": "blake3:b76a7d92bf169768fb379f2cca53c51afe13b372a8452b659831ea03a64ab74a",
+          "source": {
+            "rate": { "num": 24, "den": 1 },
+            "range": { "start": 0, "duration": 72 }
+          },
+          "params": { "speed": 1.0 },
+          "audio": {
+            "material": "blake3:b76a7d92bf169768fb379f2cca53c51afe13b372a8452b659831ea03a64ab74a",
+            "source": {
+              "rate": { "num": 24, "den": 1 },
+              "range": { "start": 0, "duration": 72 }
+            }
+          }
+        },
+        "body": {
+          "material": "blake3:769f650d3431bd8317458acf9e8d145253b9e2a92c7f6050457321a05bcb0709",
+          "source": {
+            "rate": { "num": 24, "den": 1 },
+            "range": { "start": 0, "duration": 96 }
+          },
+          "params": { "speed": 1.0 },
+          "audio": {
+            "material": "blake3:769f650d3431bd8317458acf9e8d145253b9e2a92c7f6050457321a05bcb0709",
+            "source": {
+              "rate": { "num": 24, "den": 1 },
+              "range": { "start": 0, "duration": 96 }
+            }
+          }
+        },
+        "cta": {
+          "material": "blake3:791d4d73c17ce927b9445c04f8922c04f4183c1c0f78d491b6a5d0642f5f251d",
+          "source": {
+            "rate": { "num": 24, "den": 1 },
+            "range": { "start": 0, "duration": 72 }
+          },
+          "params": { "speed": 1.0 },
+          "audio": {
+            "material": "blake3:791d4d73c17ce927b9445c04f8922c04f4183c1c0f78d491b6a5d0642f5f251d",
+            "source": {
+              "rate": { "num": 24, "den": 1 },
+              "range": { "start": 0, "duration": 72 }
+            }
+          }
+        },
+        "captions": {
+          "material": "blake3:42e40e1cc2cb36e40fa6fcb1791e940383a5e0cb7113c838c4696a59e85172b7",
+          "source": {
+            "rate": { "num": 30, "den": 1 },
+            "range": { "start": 0, "duration": 300 }
+          }
+        }
+      }
+    }
+  ]
+}

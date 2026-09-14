@@ -26,6 +26,41 @@ concept → scions → team iteration → shipped build
 Scion inheritance is a relationship between variants. Git history is a
 relationship between revisions. They are intentionally separate. See ADR 0007.
 
+## What a video is
+
+A video in graft is not “hook + body + cta” as the whole film. It is:
+
+- one **score clock** (rational frames, not microseconds)
+- **addressable slots** with roles (`hook` `body` `proof` `cta` `vo`
+  `captions` `bed` `brand`) that may overlap in dest time
+- **scions** whose parentage is variant derivation, not Git history
+- **layers** (`base` / `copy` / `grade` / `legal`) as binding opinions
+- a **time map** on an exact shipped build: dest frames → slot id
+
+Spine slots are sequential on the clock. Overlay slots (`vo`, `captions`,
+`bed`, `brand`) share dest time with the spine. `9x16` is a dest, not a
+slot. graft does not infer this breakdown from pixels, detect silence in
+the mp4, or guess a replacement clip.
+
+| Command | In | Out |
+| --- | --- | --- |
+| `compile` | score + scion + CAS materials | dest (+ `.vtt`), build id, time map |
+| `signal` / `feedback ingest` | kind + build (+ optional dest range) | dirty slots, kerfs, mixes, clean |
+| `iterate` | that build + resolved feedback | new scion: parent + `change_request`, empty layers |
+| `bind` | slot + new essence | layer opinion on that scion |
+| `diff` | two scions | semantic slot/layer delta, no media merge |
+
+Versions stay three planes: Git (recipe), CAS (essence hashes), action
+cache (encodes). Relating a dubbed dest to the picture dest is the same
+concept, a parent scion, and unchanged `hook` / `body` / `cta` BlobIds.
+
+Worked dirty sets: [`examples/hook-v3-body-v1-9x16/`](../examples/hook-v3-body-v1-9x16/)
+(`hook_rate` does not dirty `body`) and
+[`examples/dub-en-9x16/`](../examples/dub-en-9x16/) (picture → `dub-en` /
+`dub-hi`, `vo_hold`, explicit 3–5s `note`, `hold` on body). Bindings in
+the latter are BLAKE3 of local Veo / MyWonder essence; the mp4s stay out
+of git.
+
 ## Three delta layers inside the build boundary
 
 ```
