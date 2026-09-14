@@ -9,6 +9,11 @@ crates.io is not published (`publish = false`).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-14
+
+Compiler tag after the founding loop. Schema format id stays `0.2.0`.
+crates.io stays unpublished (`publish = false`).
+
 ### Added
 
 - Optional `score.joins` (`cut` / `fade`). Fade fills a real kerf; changing
@@ -22,9 +27,6 @@ crates.io is not published (`publish = false`).
   `slot_encode`. Unknown binding `params` besides `speed` are rejected.
   `scion create` defaults `--dest-id` from `score.dest_default`.
 - OTIO import restores bound spine audio from `metadata.graft.audio`.
-
-### Added (compiler physics)
-
 - Applied `params.speed`: `graft-intra` resamples dest frames; ffmpeg uses
   `setpts` / `atempo`. Adjacent clean slots stay hits.
 - Long-GOP kerf fill for non-IDR joins; empty kerf remains the closed-GOP
@@ -91,6 +93,7 @@ release.
 - Worked example `hook_v3 + body_v1 + cta_v1 @ 9x16`.
 - Reference signal → dirty-set implementation and north-star test.
 
-[Unreleased]: https://github.com/eonik-ai/graft/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/eonik-ai/graft/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/eonik-ai/graft/releases/tag/v0.2.1
 [0.2.0]: https://github.com/eonik-ai/graft/releases/tag/v0.2.0
 [0.1.0]: https://github.com/eonik-ai/graft/releases/tag/v0.1.0

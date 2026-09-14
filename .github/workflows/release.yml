@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 name: release
 
-# Cut a compiler release: git tag v0.2.0 (not v0.1.0 — that is the spec snapshot).
+# Cut a compiler release: git tag v0.2.* (not v0.1.0 — that is the spec snapshot).
 on:
   push:
     tags:
@@ -57,4 +57,4 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --title "${GITHUB_REF_NAME}" \
-            --notes "First workspace/compiler tag. Schema format id is 0.2.0. Needs ffmpeg on PATH. crates.io is not published (\`publish = false\`)."
+            --notes "Schema format id is 0.2.0. Needs ffmpeg on PATH. crates.io is not published (\`publish = false\`)."

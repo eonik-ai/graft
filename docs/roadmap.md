@@ -11,9 +11,9 @@ A fresh local workspace must complete:
 > concept → scions → team iteration → shipped build → platform signal →
 > addressed slot → new scion
 
-That loop is implemented and tagged. Overlay roles, named fades, and
-HTTP/S3 store transport are in-tree. Remaining honesty work is crates.io
-still unpublished.
+That loop is implemented and tagged `v0.2.0`. Overlay roles, named fades,
+and HTTP/S3 store transport are tagged `v0.2.1`. Remaining honesty work
+is crates.io still unpublished.
 
 ## Implemented
 

@@ -15,7 +15,7 @@ url: "https://github.com/eonik-ai/graft"
 abstract: >-
   Incremental compiler for video composition. Change a hook,
   bitstream-copy the body. JSON score, CAS essence, ffmpeg/x264.
-version: "0.2.0"
+version: "0.2.1"
 keywords:
   - video
   - compiler
