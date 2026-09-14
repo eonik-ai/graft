@@ -68,3 +68,8 @@ This ADR supersedes the compiler-only product boundary stated in
 - Documentation and releases must distinguish implemented compiler capability
   from the intended workspace. The current implementation is not yet the full
   founding loop.
+
+## Notes
+
+2026-09-14: the founding loop is tagged `v0.2.0`. This note does not change
+the Decision. Overlay actions and named fades are ADR 0008.
