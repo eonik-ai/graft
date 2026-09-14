@@ -6,16 +6,22 @@
 use std::path::{Path, PathBuf};
 
 mod fs;
+mod http;
 mod id;
 mod kind;
 mod memory;
 mod object;
+mod remote;
+mod s3;
 
 pub use fs::Fs;
+pub use http::Http;
 pub use id::{ActionKey, ActionResult, BlobId, CacheEntry};
 pub use kind::Kind;
 pub use memory::Memory;
 pub use object::Object;
+pub use remote::Remote;
+pub use s3::S3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

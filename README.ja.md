@@ -63,7 +63,7 @@ _[asciinema](https://github.com/asciinema/asciinema) で記録した実際のロ
 - 宣言ウィンドウと出荷済み time map で `hook_rate` を解決する
 - 範囲付き OTIO サブセットを損失レポート付きで export/import する
 - decode と composite で選択 scion をプレビューし、同期音声と overlay mix を載せる
-- object-store ルートへ欠損 blob 発見つきで同期する。remote compile はない。
+- パス、`https://`、または `s3://` へ欠損 blob 発見つきで同期する。remote compile はない。
 
 ## できないこと
 

@@ -68,7 +68,7 @@ La source de lecture est [`landing.cast`](docs/assets/landing.cast)._
 - Exporter/importer un sous-ensemble OTIO borné avec un rapport de perte
 - Prévisualiser un scion par décodage et composite, avec audio synchronisé
   et mix d’overlay
-- Synchroniser les blobs vers une racine object-store avec
+- Synchroniser les blobs vers un chemin, `https://` ou `s3://` avec
   découverte des blobs manquants. Il n’y a pas de compile distant.
 
 ## Ce qu’il ne peut pas faire

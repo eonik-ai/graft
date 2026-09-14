@@ -11,8 +11,8 @@ A fresh local workspace must complete:
 > concept → scions → team iteration → shipped build → platform signal →
 > addressed slot → new scion
 
-That loop is implemented and tagged. Overlay roles and named fades are
-in-tree. Remaining honesty work is HTTP/S3 store transport and crates.io
+That loop is implemented and tagged. Overlay roles, named fades, and
+HTTP/S3 store transport are in-tree. Remaining honesty work is crates.io
 still unpublished.
 
 ## Implemented
@@ -27,7 +27,7 @@ still unpublished.
   `ActionResult` provenance, concat verification, object-store sync.
 - Scoped OTIO export/import with a machine-readable loss report.
 - Local decode-and-composite preview with synced audio and overlay mix.
-- Named fade kerfs.
+- Named fade kerfs; HTTP/S3 object-store transport (same compiler).
 
 ## Still later / never in core
 

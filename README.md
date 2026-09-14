@@ -67,8 +67,8 @@ The replay source is [`landing.cast`](docs/assets/landing.cast)._
 - Export/import a scoped OTIO subset with an explicit loss report
 - Preview a selected scion by decode and composite, with synced audio
   and overlay mix
-- Sync blobs to a filesystem object-store root with missing-blob
-  discovery. There is no remote compile.
+- Sync blobs to a filesystem, `https://`, or `s3://` object-store root
+  with missing-blob discovery. There is no remote compile.
 
 ## What it cannot do
 

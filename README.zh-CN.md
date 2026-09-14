@@ -61,7 +61,7 @@ _真实的本地会话，由 [asciinema](https://github.com/asciinema/asciinema)
 - 通过声明窗口与已交付 time map 解析 `hook_rate`
 - 导出/导入有范围的 OTIO 子集，并给出损失报告
 - 通过 decode 与 composite 预览所选 scion，并带同步音频与 overlay mix
-- 用缺失 blob 发现把 blob 同步到 object-store 根目录。没有远程 compile。
+- 将 blob 同步到路径、`https://` 或 `s3://`，并发现缺失 blob。没有远程 compile。
 
 ## 它做不到什么
 

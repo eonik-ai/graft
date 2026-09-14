@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use graft_cas::{Fs, Kind, Object, Store};
+use graft_cas::{Fs, Kind, Object, Remote, Store};
 use graft_compile::{
     compile, declared_signal_range, dirty_from_signal_range, lower, materials_present,
     prev_overlay, probe_bytes, write_time_map_artifact, FfmpegX264, FrameIntra, MaterialKind,
@@ -1050,9 +1050,24 @@ pub fn status(dir: &Path) -> Result<()> {
     }))
 }
 
-pub fn store_missing(dir: &Path, remote: PathBuf) -> Result<()> {
+fn open_remote(dir: &Path, remote: &str) -> Result<Remote> {
+    if remote.starts_with("s3://")
+        || remote.starts_with("http://")
+        || remote.starts_with("https://")
+    {
+        Ok(Remote::open(remote)?)
+    } else {
+        Ok(Remote::open(
+            paths::resolve_in_dir(dir, PathBuf::from(remote))
+                .to_string_lossy()
+                .as_ref(),
+        )?)
+    }
+}
+
+pub fn store_missing(dir: &Path, remote: String) -> Result<()> {
     let local = Object::open(paths::graft_dir(dir))?;
-    let remote = Object::open(paths::resolve_in_dir(dir, remote))?;
+    let remote = open_remote(dir, &remote)?;
     let wanted = local.list_blobs()?;
     paths::print_json(&serde_json::json!({
         "missing": remote
@@ -1063,9 +1078,9 @@ pub fn store_missing(dir: &Path, remote: PathBuf) -> Result<()> {
     }))
 }
 
-pub fn store_push(dir: &Path, remote: PathBuf) -> Result<()> {
+pub fn store_push(dir: &Path, remote: String) -> Result<()> {
     let local = Object::open(paths::graft_dir(dir))?;
-    let remote = Object::open(paths::resolve_in_dir(dir, remote))?;
+    let remote = open_remote(dir, &remote)?;
     let wanted = local.list_blobs()?;
     let copied = remote.push_from(&local, &wanted)?;
     for (key, entry) in local.list_actions()? {
@@ -1074,9 +1089,9 @@ pub fn store_push(dir: &Path, remote: PathBuf) -> Result<()> {
     paths::print_json(&serde_json::json!({ "pushed": copied }))
 }
 
-pub fn store_pull(dir: &Path, remote: PathBuf) -> Result<()> {
+pub fn store_pull(dir: &Path, remote: String) -> Result<()> {
     let local = Object::open(paths::graft_dir(dir))?;
-    let remote = Object::open(paths::resolve_in_dir(dir, remote))?;
+    let remote = open_remote(dir, &remote)?;
     let wanted = remote.list_blobs()?;
     let copied = remote.pull_into(&local, &wanted)?;
     for (key, entry) in remote.list_actions()? {

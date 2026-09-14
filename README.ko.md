@@ -63,7 +63,7 @@ _[asciinema](https://github.com/asciinema/asciinema)로 녹화한 실제 로컬 
 - 선언된 창과 출고된 time map으로 `hook_rate`를 해석한다
 - 범위가 있는 OTIO 부분집합을 손실 보고서와 함께 export/import한다
 - decode와 composite로 선택한 scion을 미리 보고, 동기 오디오와 overlay mix를 실는다
-- object-store 루트로 누락 blob 발견과 함께 동기화한다. remote compile은 없다.
+- 경로, `https://`, 또는 `s3://`로 누락 blob 발견과 함께 동기화한다. remote compile은 없다.
 
 ## 하지 않는 일
 

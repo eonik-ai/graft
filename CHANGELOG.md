@@ -15,6 +15,8 @@ crates.io is not published (`publish = false`).
   duration misses that kerf only. Closed-GOP `cut` stays empty at IDR.
 - Overlay plane: `vo`/`bed` `audio_mix`, `captions` sidecar, `brand`
   `overlay_mix`. A hook or caption swap does not recut body `slot_encode`.
+- HTTP and S3 object-store backends on the same blob/action layout.
+  `graft store` `--remote` accepts a path, `https://`, or `s3://`.
 - `encoder.level` and `rate_control.mode=bitrate` reach ffmpeg. The dest
   encoder fingerprint is shared, so a level/bitrate change misses every
   `slot_encode`. Unknown binding `params` besides `speed` are rejected.

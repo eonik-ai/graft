@@ -214,6 +214,7 @@ Mirrors `schema/`. Do not add a field here that is not in the schema.
 | `Memory` | tests and ephemeral device stores |
 | `Fs` | `.graft/blobs/<kind>/<aa>/<hex>` and `.graft/actions/<aa>/<hex>` |
 | `Object` | same layout on a remote filesystem root; resumable put; missing-blob discovery |
+| `Http` / `S3` | same layout over `https://` or `s3://`; no remote compile |
 
 Object-store backends implement `Store`. They do not change the IR.
 Local store lives at `<project>/.graft` and is gitignored.

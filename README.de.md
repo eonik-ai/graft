@@ -68,7 +68,7 @@ Die Wiedergabequelle ist [`landing.cast`](docs/assets/landing.cast)._
 - Eine begrenzte OTIO-Teilmenge mit Verlustbericht exportieren/importieren
 - Einen gewählten scion per Decode und Composite previewen, mit Sync-Audio
   und Overlay-Mix
-- Blobs zu einer object-store-Wurzel mit Missing-Blob-Entdeckung
+- Blobs zu einem Pfad, `https://` oder `s3://` mit Missing-Blob-Entdeckung
   synchronisieren. Es gibt kein Remote-compile.
 
 ## Was es nicht kann

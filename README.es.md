@@ -68,7 +68,7 @@ La fuente de reproducción es [`landing.cast`](docs/assets/landing.cast)._
 - Exportar/importar un subconjunto OTIO acotado con un informe de pérdida
 - Previsualizar un scion por decode y composite, con audio sincronizado
   y mezcla de overlay
-- Sincronizar blobs a una raíz object-store con descubrimiento de
+- Sincronizar blobs a una ruta, `https://` o `s3://` con descubrimiento de
   blobs faltantes. No hay compile remoto.
 
 ## Qué no puede hacer

@@ -150,18 +150,21 @@ enum Command {
 enum StoreCommand {
     /// List blobs present locally but missing from a remote object store.
     Missing {
+        /// Filesystem path, `https://`, or `s3://bucket/prefix`.
         #[arg(long)]
-        remote: PathBuf,
+        remote: String,
     },
     /// Push missing local blobs to a remote object-store root.
     Push {
+        /// Filesystem path, `https://`, or `s3://bucket/prefix`.
         #[arg(long)]
-        remote: PathBuf,
+        remote: String,
     },
     /// Pull missing remote blobs into the local store.
     Pull {
+        /// Filesystem path, `https://`, or `s3://bucket/prefix`.
         #[arg(long)]
-        remote: PathBuf,
+        remote: String,
     },
 }
 
