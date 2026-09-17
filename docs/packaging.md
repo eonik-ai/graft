@@ -26,7 +26,7 @@ One PR per family. pkg.bot clones follow the parent. These are **requests**, not
 | nix | nixpkgs unstable + all stables | https://github.com/NixOS/nixpkgs/pull/564184 |
 | macports | MacPorts | https://github.com/macports/macports-ports/pull/34726 |
 | void | Void Linux | https://github.com/void-linux/void-packages/pull/62574 |
-| openwrt | OpenWrt 24.10 / 23.05 | https://github.com/openwrt/packages/pull/30552 |
+| openwrt | OpenWrt 24.10 / 23.05 | https://github.com/openwrt/packages/pull/30553 |
 | solus | Solus | https://github.com/getsolus/packages/pull/10718 |
 | pkg | FreeBSD Ports | https://github.com/freebsd/freebsd-ports/pull/624 |
 | slackbuilds | SlackBuilds + Slackware current | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 |

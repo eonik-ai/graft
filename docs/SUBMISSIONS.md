@@ -40,7 +40,7 @@ Do **not** file BioArch, BlackArch, or ArchPOWER overlays.
 | nixpkgs | open, lint follow-up pushed | https://github.com/NixOS/nixpkgs/pull/564184 | treefmt + `__structuredAttrs` on the branch |
 | MacPorts | open | https://github.com/macports/macports-ports/pull/34726 | |
 | Void | open | https://github.com/void-linux/void-packages/pull/62574 | |
-| OpenWrt | open; replacing unsigned first commit | https://github.com/openwrt/packages/pull/30552 | FormalityCheck audits every commit; a single Signed-off-by commit is required |
+| OpenWrt | open, single Signed-off-by commit | https://github.com/openwrt/packages/pull/30553 | replaces #30552 (unsigned first commit) |
 | Solus | open, review required | https://github.com/getsolus/packages/pull/10718 | |
 | FreeBSD Ports | open | https://github.com/freebsd/freebsd-ports/pull/624 | |
 | SlackBuilds | open | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 | |
