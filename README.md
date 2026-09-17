@@ -102,6 +102,7 @@ graft shells out; it does not link GPL x264.
 **macOS (Homebrew)** — this repo is the tap:
 
 ```sh
+brew trust --tap eonik-ai/graft
 brew tap eonik-ai/graft https://github.com/eonik-ai/graft
 brew install graft
 ```

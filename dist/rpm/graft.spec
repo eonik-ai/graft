@@ -6,6 +6,7 @@ Summary:        Change the hook. Keep the body.
 License:        Apache-2.0
 URL:            https://github.com/eonik-ai/graft
 Source0:        https://github.com/eonik-ai/graft/archive/refs/tags/v%{version}.tar.gz
+# Source0 sha256: aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b
 
 BuildRequires:  cargo
 BuildRequires:  rust

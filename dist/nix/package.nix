@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # nixpkgs-shaped derivation. The in-repo flake is the supported Nix path
-# until a nixpkgs PR lands. Fill the hashes after tag v0.2.2 exists.
+# until a nixpkgs PR lands. File SHA of the GitHub tag archive is in
+# ../SOURCE; fetchFromGitHub wants the unpacked NAR hash instead.
 {
   lib,
   rustPlatform,
@@ -12,6 +13,10 @@ rustPlatform.buildRustPackage rec {
   pname = "graft";
   version = "0.2.2";
 
+  # fetchFromGitHub hashes the unpacked NAR, not the file in ../SOURCE.
+  # Fill after: nix-prefetch-github eonik-ai graft --rev v0.2.2
+  # cargoHash from the first failed nix-build. The in-repo flake is the
+  # supported Nix path until a nixpkgs PR lands.
   src = fetchFromGitHub {
     owner = "eonik-ai";
     repo = "graft";

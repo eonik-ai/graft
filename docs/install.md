@@ -11,16 +11,19 @@ graft shells out; it does not link GPL x264.
 Homebrew (this repository is the tap):
 
 ```sh
+brew trust --tap eonik-ai/graft
 brew tap eonik-ai/graft https://github.com/eonik-ai/graft
 brew install graft
 ```
 
-Intel and Apple silicon both build from source. ffmpeg is a dependency.
+Homebrew 7 refuses unofficial taps until they are trusted. Stable is the
+`v0.2.2` source tarball (`url`/`sha256` in the formula).
+`brew install --HEAD graft` tracks `main`. ffmpeg is a dependency.
+GitHub Releases also attach `aarch64-apple-darwin` and
+`x86_64-apple-darwin` tarballs.
 
 MacPorts recipe: [`dist/macports/Portfile`](../dist/macports/Portfile)
-(not in macports-ports until a submitter lands it). Until then, Homebrew
-or the GitHub Release tarball for `aarch64-apple-darwin` /
-`x86_64-apple-darwin`.
+(not in macports-ports until a submitter lands it).
 
 ## Linux
 

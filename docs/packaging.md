@@ -8,8 +8,8 @@ It does not vendor or link x264.
 | Channel | Status |
 | --- | --- |
 | GitHub source (`main` + tag `v0.2.2`) | this repo |
-| GitHub Releases | tag `v0.2.*` runs [release.yml](../.github/workflows/release.yml): macOS arm64/x86_64, Linux gnu arm64/x86_64, Linux musl x86_64, `.deb` |
-| Homebrew tap | [`Formula/graft.rb`](../Formula/graft.rb) — `brew tap eonik-ai/graft https://github.com/eonik-ai/graft` |
+| GitHub Releases | tag `v0.2.*` runs [release.yml](../.github/workflows/release.yml): macOS arm64 native, macOS x86_64 cross from `macos-latest`, Linux gnu arm64/x86_64, Linux musl x86_64, `.deb` |
+| Homebrew tap | [`Formula/graft.rb`](../Formula/graft.rb) — `url`/`sha256` for `v0.2.2`; Homebrew 7: `brew trust --tap eonik-ai/graft` then `brew tap eonik-ai/graft https://github.com/eonik-ai/graft` |
 | Nix flake | [`flake.nix`](../flake.nix) — `nix run github:eonik-ai/graft` |
 | `scripts/install.sh` | matching Release tarball, else `cargo --git` |
 | crates.io | **blocked**. Crate name `graft` is [orbitinghail/graft](https://github.com/orbitinghail/graft). Workspace stays `publish = false`. Install with `cargo install --git`. |
@@ -28,7 +28,9 @@ file under [`dist/`](../dist/README.md) is not `dnf install graft`.
 3. Merge to `main`.
 4. Tag `v0.2.2` (or the next crate version). Do not reuse spec `v0.1.0`.
 5. GitHub Actions attaches binaries, tarballs, `.deb`, `SHA256SUMS`.
-6. Homebrew tap against that commit (head formula until `url`/`sha256`).
+   Intel macOS is `--target x86_64-apple-darwin` on `macos-latest` (do
+   not wait on `macos-13`).
+6. Homebrew formula `url`/`sha256` for that tag ([`dist/SOURCE`](../dist/SOURCE)).
 7. Open **one PR per family** from `dist/` after the tag exists (they need
    a tarball SHA): Debian ITP, Fedora review, aports, nixpkgs, AUR,
    macports-ports, void-packages, GURU, FreeBSD, OpenBSD, SlackBuilds,

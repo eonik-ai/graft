@@ -7,6 +7,7 @@ packages on its own schedule.
 
 Users who want a binary today: [install.md](../docs/install.md).
 GitHub Releases attach tarballs, a musl Linux build, and `.deb` files.
+The GitHub tag archive hashes are in [`SOURCE`](SOURCE).
 
 | Recipe | Family (pkg.bot) | Submit |
 | --- | --- | --- |

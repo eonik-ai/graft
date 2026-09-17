@@ -34,10 +34,10 @@ jobs:
             artifact: graft-aarch64-apple-darwin
             target: ""
             extra: ""
-          - os: macos-13
+          - os: macos-latest
             artifact: graft-x86_64-apple-darwin
-            target: ""
-            extra: ""
+            target: x86_64-apple-darwin
+            extra: apple-cross
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -128,6 +128,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/graft-* dist/*.tar.gz dist/*.deb dist/SHA256SUMS \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "Schema format id is 0.2.0. Needs ffmpeg on PATH. See docs/install.md. crates.io name graft is taken (orbitinghail); this CLI stays unpublished there. Distro recipes in dist/ are not yet listed on pkg.bot."
+          tag="${GITHUB_REF_NAME}"
+          notes="Schema format id is 0.2.0. Needs ffmpeg on PATH. See docs/install.md. crates.io name graft is taken (orbitinghail); this CLI stays unpublished there. Distro recipes in dist/ are not yet listed on pkg.bot."
+          set -- dist/graft-* dist/*.tar.gz dist/*.deb dist/SHA256SUMS
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$@" --clobber
+          else
+            gh release create "$tag" "$@" --title "$tag" --notes "$notes" --verify-tag
+          fi

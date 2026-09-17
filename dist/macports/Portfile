@@ -17,9 +17,9 @@ homepage            https://github.com/eonik-ai/graft
 depends_run         port:ffmpeg
 
 checksums           ${distname}${extract.suffix} \
-                    rmd160  0 \
-                    sha256  0 \
-                    size    0
+                    rmd160  caa20674288c2d2b141f3867ec9be4b3e1f4adce \
+                    sha256  aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b \
+                    size    601165
 
 cargo.offline_cmd   {}
 build.pre_args-append --bin graft

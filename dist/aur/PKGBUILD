@@ -7,17 +7,17 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/eonik-ai/graft"
 license=('Apache-2.0')
 depends=('ffmpeg')
-makedepends=('rust' 'cargo' 'git')
-source=("$pkgname::git+https://github.com/eonik-ai/graft.git#tag=v$pkgver")
-sha256sums=('SKIP')
+makedepends=('rust' 'cargo')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/eonik-ai/graft/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b')
 
 build() {
-  cd "$pkgname"
+  cd "$pkgname-$pkgver"
   cargo build --release --locked --bin graft
 }
 
 package() {
-  cd "$pkgname"
+  cd "$pkgname-$pkgver"
   install -Dm755 target/release/graft "$pkgdir/usr/bin/graft"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"

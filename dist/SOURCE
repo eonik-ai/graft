@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Canonical hashes for the GitHub tag archive
+# https://github.com/eonik-ai/graft/archive/refs/tags/v0.2.2.tar.gz
+# Unpacks as graft-0.2.2/
+size    601165
+md5     f7510a83f50df8432747fb7787b5b794
+rmd160  caa20674288c2d2b141f3867ec9be4b3e1f4adce
+sha1    401adbd83dc416019cfe5626b7337288b24c593f
+sha256  aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b
+sha512  a97d5cdadb8b96e1129678b32860de1cbe673f357c36407c55ec48e13b1f07b7fdf57a7c5720c9d8375b92700816bad305e38761093dfe65acbc1fa014d72254
+sri     sha256-qnNrSb2CXqq80NcTs8DlAveUdmwcZc8GHRiWPappvzs=

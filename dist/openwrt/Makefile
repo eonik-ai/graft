@@ -10,6 +10,8 @@ PKG_RELEASE:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/eonik-ai/graft.git
 PKG_SOURCE_VERSION:=v$(PKG_VERSION)
+# Mirror hash is of OpenWrt's fetched git tarball, not dist/SOURCE. Fill
+# after the first `make package/graft/download`.
 PKG_MIRROR_HASH:=skip
 
 PKG_MAINTAINER:=eonik <connect@eonik.ai>

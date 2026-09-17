@@ -10,6 +10,16 @@ This project's crates stay `publish = false`.
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Release intel macOS binary is cross-compiled on `macos-latest`
+  (`--target x86_64-apple-darwin`) so the cut is not blocked on `macos-13`
+  runners. `gh release upload --clobber` if the tag already has a release.
+- Dist recipes carry the `v0.2.2` GitHub tag-archive hashes
+  ([`dist/SOURCE`](dist/SOURCE)). Homebrew formula has `url`/`sha256` for
+  that tag. Homebrew 7 needs `brew trust --tap eonik-ai/graft` before the
+  tap will load.
+
 ## [0.2.2] - 2026-09-16
 
 Porcelain closes the founding user loop. Schema format id stays `0.2.0`.

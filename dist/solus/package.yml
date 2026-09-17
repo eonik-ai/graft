@@ -3,7 +3,7 @@ version    : 0.2.2
 release    : 1
 homepage   : https://github.com/eonik-ai/graft
 source     :
-    - https://github.com/eonik-ai/graft/archive/refs/tags/v0.2.2.tar.gz : SKIP
+    - https://github.com/eonik-ai/graft/archive/refs/tags/v0.2.2.tar.gz : aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b
 license    : Apache-2.0
 component  : multimedia.video
 summary    : Change the hook. Keep the body.

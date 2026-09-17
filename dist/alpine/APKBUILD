@@ -23,3 +23,7 @@ check() {
 package() {
 	install -Dm755 target/release/graft -t "$pkgdir"/usr/bin/
 }
+
+sha512sums="
+a97d5cdadb8b96e1129678b32860de1cbe673f357c36407c55ec48e13b1f07b7fdf57a7c5720c9d8375b92700816bad305e38761093dfe65acbc1fa014d72254  graft-0.2.2.tar.gz
+"
