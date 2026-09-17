@@ -18,7 +18,7 @@ Do these in this order. Each one unblocks a whole pkg.bot family. Paste-ready fi
 | 4 | Create a [gitlab.alpinelinux.org](https://gitlab.alpinelinux.org) account, fork `alpine/aports`, add `community/graft/` from [`dist/alpine/`](../dist/alpine/). | Alpine edge + stables | [`dist/alpine/PUBLISH.md`](../dist/alpine/PUBLISH.md) |
 | 5 | Apply as a [GURU contributor](https://wiki.gentoo.org/wiki/Project:GURU), then open a PR from https://github.com/techievena/guru/tree/graft-0.2.2 | Gentoo overlay GURU, LiGurOS | [`dist/gentoo/PUBLISH.md`](../dist/gentoo/PUBLISH.md) |
 | 6 | OpenBSD ports needs a ports CVS login. Recipe is ready. | OpenBSD Ports | [`dist/openbsd/PUBLISH.md`](../dist/openbsd/PUBLISH.md) |
-| 7 | Optional: Homebrew core. Tap already works. PR https://github.com/Homebrew/homebrew-core/pull/311719 is open; remaining is a local `brew install --build-from-source` so they will bottle. | brew-core bottles | tap is already live |
+| 7 | Optional: Homebrew core. Tap already works. PR https://github.com/Homebrew/homebrew-core/pull/311719 builds and bottles; `brew audit --online --new` fails until the GitHub repo is notable (≥75 stars, or ≥30 forks, or ≥30 watchers). | brew-core bottles | tap is already live |
 
 Do **not** file BioArch, BlackArch, or ArchPOWER overlays.
 
@@ -44,7 +44,7 @@ Do **not** file BioArch, BlackArch, or ArchPOWER overlays.
 | Solus | open, review required | https://github.com/getsolus/packages/pull/10718 | |
 | FreeBSD Ports | open | https://github.com/freebsd/freebsd-ports/pull/624 | |
 | SlackBuilds | open | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 | |
-| Homebrew core | open | https://github.com/Homebrew/homebrew-core/pull/311719 | formula moved to `Formula/g/graft.rb`; tap is the supported macOS path until they bottle |
+| Homebrew core | open; blocked on notability | https://github.com/Homebrew/homebrew-core/pull/311719 | formula at `Formula/g/graft.rb`; tap_syntax green; bottles built; `audit --new` wants ≥75 stars / 30 forks / 30 watchers. Tap is the supported macOS path. |
 | GURU | branch only | https://github.com/techievena/guru/tree/graft-0.2.2 | GitHub PRs need contributor access — see action 5 |
 
 ## Cannot list

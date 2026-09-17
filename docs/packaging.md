@@ -31,7 +31,7 @@ One PR per family. pkg.bot clones follow the parent. These are **requests**, not
 | pkg | FreeBSD Ports | https://github.com/freebsd/freebsd-ports/pull/624 |
 | slackbuilds | SlackBuilds + Slackware current | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 |
 | portage | GURU (Gentoo overlay) | branch https://github.com/techievena/guru/tree/graft-0.2.2 — GitHub PRs on GURU need contributor access |
-| brew | macOS (not on pkg.bot) | this repo is the tap; brew-core https://github.com/Homebrew/homebrew-core/pull/311719 (needs template/notability review) |
+| brew | macOS (not on pkg.bot) | this repo is the tap; brew-core https://github.com/Homebrew/homebrew-core/pull/311719 (blocked on GitHub notability) |
 | apt | Debian + Ubuntu + all debuntu clones | Debian ITP (see [`dist/debian/ITP`](../dist/debian/ITP)) |
 | rpm | Fedora + EPEL + RHEL clones + openSUSE + Mageia + OpenMandriva | Fedora review needs a FAS/Bugzilla account |
 | aur | AUR, then Arch/Manjaro/Artix/Parabola | AUR SSH account |
