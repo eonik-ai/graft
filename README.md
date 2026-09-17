@@ -228,7 +228,7 @@ vulnerabilities privately through [SECURITY.md](SECURITY.md).
 | | |
 |---|---|
 | Why graft exists | [Mission](docs/mission.md) · [principles](docs/principles.md) · [loop](docs/loop.md) · [history](docs/history.md) |
-| Install | [install](docs/install.md) · [packaging](docs/packaging.md) · [walkthrough](docs/walkthrough.md) |
+| Install | [install](docs/install.md) · [packaging](docs/packaging.md) · [submissions](docs/SUBMISSIONS.md) · [walkthrough](docs/walkthrough.md) |
 | Compiler contract | [Architecture](docs/architecture.md) · [cache and kerfs](docs/compile.md) · [time map](docs/time-map.md) |
 | Machine contract | [JSON Schema](schema/) · [worked example](examples/hook-v3-body-v1-9x16/) |
 | Boundaries | [git, OTIO, IMF, ffmpeg concat](docs/comparison.md) · [adapter loss matrix](docs/adapters.md) |

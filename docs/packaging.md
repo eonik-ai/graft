@@ -14,7 +14,10 @@ It does not vendor or link x264.
 | `scripts/install.sh` | matching Release tarball, else `cargo --git` |
 | crates.io | **blocked**. Crate name `graft` is [orbitinghail/graft](https://github.com/orbitinghail/graft). Workspace stays `publish = false`. Install with `cargo install --git`. |
 
-## Family submissions (filed 2026-09-17)
+## Family submissions
+
+Living board (what is live, filed, or waiting on you):
+[`docs/SUBMISSIONS.md`](SUBMISSIONS.md).
 
 One PR per family. pkg.bot clones follow the parent. These are **requests**, not listings, until each community merges.
 

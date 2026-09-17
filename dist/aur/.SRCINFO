@@ -1,0 +1,15 @@
+pkgbase = graft
+	pkgdesc = Change the hook. Keep the body. Local-first video composition.
+	pkgver = 0.2.2
+	pkgrel = 1
+	url = https://github.com/eonik-ai/graft
+	arch = x86_64
+	arch = aarch64
+	license = Apache-2.0
+	makedepends = rust
+	makedepends = cargo
+	depends = ffmpeg
+	source = graft-0.2.2.tar.gz::https://github.com/eonik-ai/graft/archive/refs/tags/v0.2.2.tar.gz
+	sha256sums = aa736b49bd825eaabcd0d713b3c0e502f794766c1c65cf061d18963daa69bf3b
+
+pkgname = graft
