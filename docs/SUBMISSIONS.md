@@ -37,14 +37,14 @@ Do **not** file BioArch, BlackArch, or ArchPOWER overlays.
 
 | Family | State | Link | Notes |
 | --- | --- | --- | --- |
-| nixpkgs | open, lint follow-up pushed | https://github.com/NixOS/nixpkgs/pull/564184 | treefmt + `__structuredAttrs` on the branch |
+| nixpkgs | open, CI green | https://github.com/NixOS/nixpkgs/pull/564184 | lint/eval/build of the added attr passed |
 | MacPorts | open | https://github.com/macports/macports-ports/pull/34726 | |
 | Void | open | https://github.com/void-linux/void-packages/pull/62574 | |
-| OpenWrt | open, single Signed-off-by commit | https://github.com/openwrt/packages/pull/30553 | replaces #30552 (unsigned first commit) |
+| OpenWrt | open, FormalityCheck green | https://github.com/openwrt/packages/pull/30553 | single Signed-off-by commit; #30552 closed |
 | Solus | open, review required | https://github.com/getsolus/packages/pull/10718 | |
 | FreeBSD Ports | open | https://github.com/freebsd/freebsd-ports/pull/624 | |
 | SlackBuilds | open | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 | |
-| Homebrew core | open | https://github.com/Homebrew/homebrew-core/pull/311719 | formula must live at `Formula/g/graft.rb`; tap is the supported macOS path until they bottle |
+| Homebrew core | open | https://github.com/Homebrew/homebrew-core/pull/311719 | formula moved to `Formula/g/graft.rb`; tap is the supported macOS path until they bottle |
 | GURU | branch only | https://github.com/techievena/guru/tree/graft-0.2.2 | GitHub PRs need contributor access — see action 5 |
 
 ## Cannot list
