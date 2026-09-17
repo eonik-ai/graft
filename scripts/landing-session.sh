@@ -20,18 +20,10 @@ type_line() {
   sleep 0.15
 }
 
-type_line "graft compile --out ad.mp4"
-graft compile --out ad.mp4 >/dev/null
+type_line "graft ship --out ad.mp4"
+graft ship --out ad.mp4 >/dev/null
 sleep 0.9
 
-type_line "graft scion fork 9x16 hook-v2"
-graft scion fork 9x16 hook-v2
-sleep 0.5
-
-type_line "graft bind hook ./hook-v2.mov --scion hook-v2"
-graft bind hook ./hook-v2.mov --scion hook-v2
-sleep 0.6
-
-type_line "graft dirty --scion hook-v2"
-graft dirty --scion hook-v2
+type_line "graft swap hook ./takes/hooks/v2.mov --out ad-v2.mp4"
+graft swap hook ./takes/hooks/v2.mov --out ad-v2.mp4 >/dev/null
 sleep 4

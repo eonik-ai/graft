@@ -1,0 +1,22 @@
+name       : graft
+version    : 0.2.2
+release    : 1
+homepage   : https://github.com/eonik-ai/graft
+source     :
+    - https://github.com/eonik-ai/graft/archive/refs/tags/v0.2.2.tar.gz : SKIP
+license    : Apache-2.0
+component  : multimedia.video
+summary    : Change the hook. Keep the body.
+description: |
+    Local-first composition workspace. Incremental compiler for video.
+builddeps  :
+    - rust
+rundeps    :
+    - ffmpeg
+setup      : |
+    %cargo_setup
+build      : |
+    %cargo_build --bin graft
+install    : |
+    %cargo_install
+    install -Dm0755 target/release/graft "$installdir/usr/bin/graft"

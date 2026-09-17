@@ -1,6 +1,9 @@
 # dub-en @ 9x16
 
-Bindings hashed from real local essence. Mp4/mov files are not in git.
+Dirty-set **contract**, not a dubbed film. `vo` mixes over spine AAC
+([RFC 0002](../../docs/rfc/0002-overlay-joins-and-mix.md)); it does not
+replace picture audio. Bindings hashed from real local essence. Mp4/mov
+files are not in git.
 
 Clock is **10s @ 30fps** (300 frames), cut from three 8s Veo clips at 24fps
 720×1280 plus a 10.67s MyWonder take as vo. Dest geometry matches the

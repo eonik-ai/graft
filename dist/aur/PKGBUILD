@@ -1,0 +1,24 @@
+# Maintainer: eonik <connect@eonik.ai>
+pkgname=graft
+pkgver=0.2.2
+pkgrel=1
+pkgdesc="Change the hook. Keep the body. Local-first video composition."
+arch=('x86_64' 'aarch64')
+url="https://github.com/eonik-ai/graft"
+license=('Apache-2.0')
+depends=('ffmpeg')
+makedepends=('rust' 'cargo' 'git')
+source=("$pkgname::git+https://github.com/eonik-ai/graft.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname"
+  cargo build --release --locked --bin graft
+}
+
+package() {
+  cd "$pkgname"
+  install -Dm755 target/release/graft "$pkgdir/usr/bin/graft"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

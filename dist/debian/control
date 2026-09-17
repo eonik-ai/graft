@@ -1,0 +1,17 @@
+Source: graft
+Section: video
+Priority: optional
+Maintainer: eonik <connect@eonik.ai>
+Build-Depends: debhelper-compat (= 13), cargo, rustc, pkg-config
+Standards-Version: 4.7.0
+Homepage: https://github.com/eonik-ai/graft
+Rules-Requires-Root: no
+
+Package: graft
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}, ffmpeg
+Description: Change the hook. Keep the body.
+ Local-first composition workspace. Incremental compiler for video.
+ Git owns recipe history; graft owns scions, layers, and compile.
+ Until this package is in Debian, use the .deb from GitHub Releases
+ or `cargo install --git`.

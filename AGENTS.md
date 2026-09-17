@@ -16,11 +16,14 @@ rename it Graft in prose, headings, or code.
 The current implementation is a local-first workspace: tracked multi-scion
 documents, layer flattening, semantic diff/merge, build provenance,
 declared-window feedback, a sequential compiler with synchronized audio on
-the ffmpeg path, a scoped OTIO adapter, local preview, and object-store
-transport. Do not claim lossless NLE round-trips, remote execution, DAM,
+the ffmpeg path, a scoped OTIO adapter, local preview, object-store
+transport, and porcelain (`ship` / `swap` / `address`) that closes the user
+loop on that IR. Do not claim lossless NLE round-trips, remote execution, DAM,
 review UI, or a published crates.io release. Do not import eonik GTM, lead
 lists, or "replace the editor" copy. First compiler GitHub tag is `v0.2.0`
-(not spec `v0.1.0`). crates.io stays unpublished until that tag.
+(not spec `v0.1.0`). crates.io crate name `graft` is taken (orbitinghail
+storage engine). This workspace stays `publish = false`. Do not claim
+distro packages exist because a recipe file is in `dist/`.
 
 ## Build and test
 

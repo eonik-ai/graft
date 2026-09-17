@@ -20,3 +20,9 @@ graft signal --kind hook_rate --build <shipped-build>
 ```
 
 `make test` fails if that result ever includes `body`.
+
+To **encode** this clock on generated media (no files in git):
+
+```sh
+make example-encode
+```

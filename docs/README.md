@@ -6,9 +6,14 @@ The machine contract is [`../schema`](../schema/).
 | File | Settles |
 | --- | --- |
 | [mission.md](mission.md) | Why graft exists |
+| [loop.md](loop.md) | User loop: ship, swap, address, takes/, reuse ledger |
+| [install.md](install.md) | Homebrew, GitHub Releases, Nix, cargo, distro recipes |
+| [packaging.md](packaging.md) | How graft enters pkg.bot families; launch checklist |
+| [walkthrough.md](walkthrough.md) | Input takes → dest v1 / v2 film |
 | [principles.md](principles.md) | Non-negotiables |
 | [glossary.md](glossary.md) | Words |
 | [architecture.md](architecture.md) | Layers, crate graph, pipeline, where code goes |
+| [history.md](history.md) | Git recipe history vs scion parentage vs `.graft/` |
 | [schema.md](schema.md) | Commentary on JSON Schema |
 | [compile.md](compile.md) | Action keys, BlobId, grain, action-cache dirty set |
 | [time-map.md](time-map.md) | Signals → slots |

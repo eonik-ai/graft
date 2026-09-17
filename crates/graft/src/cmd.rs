@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use graft_cas::{Fs, Kind, Object, Remote, Store};
@@ -12,19 +13,22 @@ use graft_compile::{
     Unimplemented,
 };
 use graft_score::{
-    load_scion, load_score, load_time_map, merge_scions, parse_range, parse_wh, require_slot_id,
-    resolve_scion, save_json, semantic_diff, AudioBinding, Binding, BindingLayer, BuildRecord,
-    ChangeRequest, Dest, Encoder, Feedback, FeedbackResolution, FrameRange, FrameRate, Layer,
-    Scion, Score, Slot, TimeMap, TimedRange, Window, DEFAULT_SPILL_FRAMES, GRAFT_SCHEMA,
+    effective_bindings, load_scion, load_score, load_time_map, merge_scions, parse_range, parse_wh,
+    require_slot_id, resolve_scion, save_json, semantic_diff, AudioBinding, Binding, BindingLayer,
+    BuildRecord, ChangeRequest, Dest, Encoder, Feedback, FeedbackResolution, FrameRange, FrameRate,
+    Layer, Scion, Score, Slot, TimeMap, TimedRange, Window, DEFAULT_SPILL_FRAMES, GRAFT_SCHEMA,
 };
 
 use crate::{paths, preview};
 
-pub fn init(dir: &Path) -> Result<()> {
+pub fn init(dir: &Path, from: Option<PathBuf>) -> Result<()> {
     std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
     let path = paths::score(dir);
     if path.exists() {
         bail!("{} already exists", path.display());
+    }
+    if let Some(from) = from {
+        return init_from_takes(dir, &paths::resolve_in_dir(dir, from));
     }
     let score = Score {
         graft: GRAFT_SCHEMA.into(),
@@ -261,6 +265,7 @@ pub fn bind(
     let rate = resolved
         .probe
         .as_ref()
+        .filter(|probe| probe.fps.is_finite() && probe.fps > 0.0)
         .map(|probe| FrameRate::from_f64(probe.fps))
         .transpose()?
         .unwrap_or(score.clock.rate);
@@ -379,6 +384,16 @@ pub fn compile_cmd(
     prev: Option<PathBuf>,
     out: Option<PathBuf>,
 ) -> Result<()> {
+    let report = compile_report(dir, scion, prev, out)?;
+    paths::print_json(&report.json)
+}
+
+fn compile_report(
+    dir: &Path,
+    scion: Option<String>,
+    prev: Option<PathBuf>,
+    out: Option<PathBuf>,
+) -> Result<CompileReport> {
     let score = load_score(&paths::score(dir))?;
     let (_, scion) = load_selected_scion(dir, scion)?;
     let previous = prev
@@ -386,7 +401,9 @@ pub fn compile_cmd(
         .transpose()?;
     let store_root = paths::graft_dir(dir);
     let store = Fs::open(&store_root)?;
+    let started = Instant::now();
     let mut outcome = compile_with_backend(&score, &scion, &store, true)?;
+    let encode_ms = started.elapsed().as_millis() as u64;
     if let Some(previous) = &previous {
         outcome.plan.prev_overlay = Some(prev_overlay(&score, &scion, previous));
     }
@@ -413,6 +430,7 @@ pub fn compile_cmd(
             }
             std::fs::write(&user_out, &bytes)?;
             eprintln!("wrote {}", user_out.display());
+            output_path = Some(user_out.clone());
             for (slot_id, blob) in &outcome.captions {
                 let text = store.get_blob(Kind::Captions, blob)?;
                 let sidecar = user_out.with_extension("vtt");
@@ -436,7 +454,12 @@ pub fn compile_cmd(
     if !outcome.encoded {
         eprintln!("plan only — missing essence or no enabled backend");
     }
-    paths::print_json(&serde_json::json!({"build": build, "plan": outcome.plan}))
+    let ledger = ledger_from_plan(&scion.id, &outcome.plan, encode_ms, outcome.encoded, &build);
+    print_ledger_table(&ledger);
+    Ok(CompileReport {
+        json: serde_json::json!({"build": build, "plan": outcome.plan, "ledger": ledger}),
+        encoded: outcome.encoded,
+    })
 }
 
 pub fn diff(dir: &Path, left: String, right: String) -> Result<()> {
@@ -552,6 +575,16 @@ pub fn feedback_show(dir: &Path, id: String) -> Result<()> {
 }
 
 pub fn iterate(dir: &Path, from: String, feedback: String, scion: String) -> Result<()> {
+    let value = iterate_inner(dir, from, feedback, scion)?;
+    paths::print_json(&value)
+}
+
+fn iterate_inner(
+    dir: &Path,
+    from: String,
+    feedback: String,
+    scion: String,
+) -> Result<serde_json::Value> {
     if paths::scion(dir, &scion).exists() {
         bail!("scion {scion} already exists");
     }
@@ -588,7 +621,7 @@ pub fn iterate(dir: &Path, from: String, feedback: String, scion: String) -> Res
     child.validate()?;
     save_json(&paths::scion(dir, &scion), &child)?;
     write_head(dir, &scion)?;
-    paths::print_json(&serde_json::json!({
+    Ok(serde_json::json!({
         "scion": scion,
         "parent": parent.id,
         "feedback": feedback,
@@ -982,6 +1015,640 @@ fn number_field(value: &serde_json::Value, key: &str) -> Result<f64> {
         .get(key)
         .and_then(|value| value.as_f64())
         .with_context(|| format!("{key} must be a number"))
+}
+
+struct CompileReport {
+    json: serde_json::Value,
+    encoded: bool,
+}
+
+const TAKE_EXTS: &[&str] = &[
+    "mov", "mp4", "mkv", "webm", "m4v", "wav", "aiff", "aif", "m4a", "aac", "vtt", "srt",
+];
+const ROLE_ORDER: &[&str] = &[
+    "hook", "body", "proof", "cta", "vo", "captions", "bed", "brand",
+];
+
+struct DiscoveredTake {
+    slot: String,
+    role: graft_score::Role,
+    path: PathBuf,
+}
+
+pub fn ship(
+    dir: &Path,
+    from: PathBuf,
+    out: PathBuf,
+    scion: Option<String>,
+    dest: Option<String>,
+    encoder: String,
+) -> Result<()> {
+    let from = paths::resolve_in_dir(dir, from);
+    let existed = paths::score(dir).is_file();
+    if !existed {
+        init(dir, Some(from.clone()))?;
+    } else {
+        add_missing_slots_from_takes(dir, &from)?;
+    }
+    ensure_root_scion(dir, scion.clone(), dest, encoder, &from)?;
+    if existed {
+        bind_takes(dir, &from)?;
+    }
+    require_spine_bound(dir)?;
+    let report = compile_report(dir, scion, None, Some(out))?;
+    if !report.encoded {
+        bail!("ship compiled a plan only — bind real takes and install ffmpeg");
+    }
+    paths::print_json(&report.json)
+}
+
+pub fn swap(
+    dir: &Path,
+    slot: String,
+    file: Option<PathBuf>,
+    from: Option<PathBuf>,
+    out: Option<PathBuf>,
+    out_dir: Option<PathBuf>,
+    scion: Option<String>,
+) -> Result<()> {
+    require_slot_id(&slot)?;
+    match (file, from) {
+        (None, None) => bail!("graft swap {slot} needs a take file or --from <dir>"),
+        (Some(_), Some(_)) => bail!("pass a take file or --from, not both"),
+        (Some(file), None) => {
+            let report = swap_one(dir, &slot, &paths::resolve_in_dir(dir, file), scion, out)?;
+            paths::print_json(&report.json)
+        }
+        (None, Some(from)) => {
+            let from = paths::resolve_in_dir(dir, from);
+            let files = list_pool_takes(&from)?;
+            if files.is_empty() {
+                bail!("no takes in {}", from.display());
+            }
+            let out_dir =
+                paths::resolve_in_dir(dir, out_dir.unwrap_or_else(|| PathBuf::from("out")));
+            std::fs::create_dir_all(&out_dir)?;
+            let parent = selected_scion_id(dir, scion)?;
+            let mut variants = Vec::new();
+            for file in files {
+                let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("take");
+                let dest = out_dir.join(format!("{slot}-{stem}.mp4"));
+                let report = swap_one(dir, &slot, &file, Some(parent.clone()), Some(dest))?;
+                variants.push(report.json);
+            }
+            paths::print_json(&serde_json::json!({
+                "parent": parent,
+                "slot": slot,
+                "variants": variants
+            }))
+        }
+    }
+}
+
+pub fn address(
+    dir: &Path,
+    kind: String,
+    t: Option<String>,
+    build: String,
+    scion: Option<String>,
+) -> Result<()> {
+    let score = load_score(&paths::score(dir))?;
+    let (record, time_map) = load_build(dir, &build)?;
+    let range = signal_range(&score, &time_map, &kind, t.as_deref())?;
+    let dirty = dirty_from_signal_range(
+        &time_map,
+        &score,
+        &kind,
+        range,
+        Some(time_map.dest_id.clone()),
+    );
+    let feedback_id = unique_feedback_id(dir, &kind)?;
+    let feedback = Feedback {
+        graft: GRAFT_SCHEMA.into(),
+        id: feedback_id.clone(),
+        build: build.clone(),
+        kind: kind.clone(),
+        range: dirty.signal.range,
+        raw: serde_json::json!({ "kind": kind, "build": build }),
+        resolved: Some(FeedbackResolution {
+            slots: dirty.slots.clone(),
+            kerfs: dirty.kerfs.clone(),
+            warnings: dirty.warnings.clone(),
+        }),
+    };
+    feedback.validate()?;
+    std::fs::create_dir_all(paths::feedback_dir(dir))?;
+    save_json(&paths::feedback(dir, &feedback_id), &feedback)?;
+    let slot = dirty.slots.first().cloned().unwrap_or_else(|| kind.clone());
+    let child = match scion {
+        Some(id) => id,
+        None => unique_scion_id(dir, &format!("{slot}-next"))?,
+    };
+    let mut iterated = iterate_inner(dir, record.id.clone(), feedback_id.clone(), child.clone())?;
+    let next = format!("graft swap {slot} <file>");
+    eprintln!("next  {next}");
+    if let Some(obj) = iterated.as_object_mut() {
+        obj.insert("kind".into(), serde_json::json!(kind));
+        obj.insert("build".into(), serde_json::json!(build));
+        obj.insert("kerfs".into(), serde_json::json!(dirty.kerfs));
+        obj.insert("clean".into(), serde_json::json!(dirty.clean));
+        obj.insert("next".into(), serde_json::json!(next));
+    }
+    paths::print_json(&iterated)
+}
+
+fn swap_one(
+    dir: &Path,
+    slot: &str,
+    file: &Path,
+    parent: Option<String>,
+    out: Option<PathBuf>,
+) -> Result<CompileReport> {
+    let score = load_score(&paths::score(dir))?;
+    if score.slot(slot).is_none() {
+        bail!("score has no slot {slot}");
+    }
+    let source_id = selected_scion_id(dir, parent)?;
+    let all = load_scions(dir)?;
+    let source = all
+        .get(&source_id)
+        .with_context(|| format!("unknown scion {source_id}"))?;
+    let binds_locally = source
+        .layers
+        .iter()
+        .any(|layer| layer.bindings.contains_key(slot));
+    let child_id = if binds_locally {
+        let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("v");
+        unique_scion_id(dir, &format!("{slot}-{}", sanitize_id_part(stem)))?
+    } else {
+        source_id.clone()
+    };
+    if child_id != source_id {
+        scion_fork(dir, source_id.clone(), child_id.clone())?;
+    }
+    bind(
+        dir,
+        slot.to_string(),
+        file.to_string_lossy().into_owned(),
+        None,
+        None,
+        None,
+        Some(child_id.clone()),
+        "base".into(),
+    )?;
+    let report = compile_report(dir, Some(child_id), None, out)?;
+    if !report.encoded {
+        bail!("swap compiled a plan only — bind real takes and ship first");
+    }
+    assert_swap_reuse(&report.json, slot)?;
+    Ok(report)
+}
+
+fn assert_swap_reuse(json: &serde_json::Value, slot: &str) -> Result<()> {
+    let mut recoded = Vec::new();
+    if let Some(slots) = json["plan"]["slots"].as_array() {
+        for entry in slots {
+            let id = entry["id"].as_str().unwrap_or("");
+            if id != slot && entry["cache"] != "hit" {
+                recoded.push(id.to_string());
+            }
+        }
+    }
+    if !recoded.is_empty() {
+        bail!(
+            "swap {slot} recoded clean siblings: {} (principle 14)",
+            recoded.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn init_from_takes(dir: &Path, from: &Path) -> Result<()> {
+    let takes = discover_takes(from)?;
+    if takes.is_empty() {
+        bail!(
+            "no named takes in {} (expected hook.mov, body.mov, cta.mov, …)",
+            from.display()
+        );
+    }
+    let (rate, _) = dest_from_takes(&takes)?;
+    let slots = slots_from_takes(&takes, rate)?;
+    let score = Score {
+        graft: GRAFT_SCHEMA.into(),
+        concept: uuid::Uuid::new_v4().to_string(),
+        clock: graft_score::Clock {
+            rate,
+            duration_frames: 1,
+        },
+        slots,
+        layers: vec![Layer::Base, Layer::Copy, Layer::Grade, Layer::Legal],
+        dest_default: Some("9x16".into()),
+        spill_threshold_frames: DEFAULT_SPILL_FRAMES,
+        joins: Vec::new(),
+    };
+    let mut score = score;
+    score.recompute_duration();
+    score.validate()?;
+    save_json(&paths::score(dir), &score)?;
+    std::fs::create_dir_all(paths::scions(dir))?;
+    std::fs::create_dir_all(paths::feedback_dir(dir))?;
+    std::fs::create_dir_all(paths::graft_dir(dir))?;
+    eprintln!("wrote {}", paths::score(dir).display());
+    ensure_root_scion(dir, None, None, "x264".into(), from)?;
+    bind_takes(dir, from)
+}
+
+fn add_missing_slots_from_takes(dir: &Path, from: &Path) -> Result<()> {
+    let takes = discover_takes(from)?;
+    if takes.is_empty() {
+        bail!(
+            "no named takes in {} (expected hook.mov, body.mov, cta.mov, …)",
+            from.display()
+        );
+    }
+    let path = paths::score(dir);
+    let mut score = load_score(&path)?;
+    let rate = score.clock.rate;
+    let existing: Vec<String> = score.slots.iter().map(|s| s.id.clone()).collect();
+    let added = slots_from_takes(&takes, rate)?
+        .into_iter()
+        .filter(|slot| !existing.iter().any(|id| id == &slot.id))
+        .collect::<Vec<_>>();
+    if added.is_empty() {
+        return Ok(());
+    }
+    let mut cursor = score.clock.duration_frames as i64;
+    for mut slot in added {
+        if slot.role.is_spine() {
+            let duration = slot.range.duration;
+            slot.range = FrameRange::new(cursor, duration);
+            if slot.role == graft_score::Role::Hook {
+                slot.window = Some(hook_window(rate, FrameRange::new(cursor, duration)));
+            }
+            cursor += duration as i64;
+        } else {
+            slot.range = FrameRange::new(0, (cursor.max(1)) as u64);
+        }
+        score.slots.push(slot);
+    }
+    score.recompute_duration();
+    score.validate()?;
+    save_json(&path, &score)?;
+    eprintln!("wrote {}", path.display());
+    Ok(())
+}
+
+fn ensure_root_scion(
+    dir: &Path,
+    scion: Option<String>,
+    dest: Option<String>,
+    encoder: String,
+    from: &Path,
+) -> Result<()> {
+    if let Ok(id) = selected_scion_id(dir, scion.clone()) {
+        if paths::scion(dir, &id).is_file() {
+            return Ok(());
+        }
+    }
+    let takes = discover_takes(from).unwrap_or_default();
+    let (rate, probed) = dest_from_takes(&takes).unwrap_or((FrameRate::new(30, 1), None));
+    let _ = rate;
+    let spec = match dest {
+        Some(value) => value,
+        None => match probed {
+            Some((w, h)) => format!("{w}x{h}"),
+            None => "1080x1920".into(),
+        },
+    };
+    let id = scion.unwrap_or_else(|| {
+        load_score(&paths::score(dir))
+            .ok()
+            .and_then(|s| s.dest_default)
+            .unwrap_or_else(|| "9x16".into())
+    });
+    if paths::scion(dir, &id).exists() {
+        write_head(dir, &id)?;
+        return Ok(());
+    }
+    scion_create(
+        dir,
+        id,
+        None,
+        spec,
+        "yuv420p".into(),
+        "bt709".into(),
+        encoder,
+    )
+}
+
+fn bind_takes(dir: &Path, from: &Path) -> Result<()> {
+    let score = load_score(&paths::score(dir))?;
+    let takes = discover_takes(from)?;
+    let scion = selected_scion_id(dir, None)?;
+    for take in takes {
+        if score.slot(&take.slot).is_none() {
+            continue;
+        }
+        bind(
+            dir,
+            take.slot,
+            take.path.to_string_lossy().into_owned(),
+            None,
+            None,
+            None,
+            Some(scion.clone()),
+            "base".into(),
+        )?;
+    }
+    Ok(())
+}
+
+fn require_spine_bound(dir: &Path) -> Result<()> {
+    let score = load_score(&paths::score(dir))?;
+    let (_, scion) = load_selected_scion(dir, None)?;
+    let bindings = effective_bindings(&score, &scion)?;
+    let missing: Vec<&str> = score
+        .slots
+        .iter()
+        .filter(|slot| slot.role.is_spine() && !slot.optional && !bindings.contains_key(&slot.id))
+        .map(|slot| slot.id.as_str())
+        .collect();
+    if !missing.is_empty() {
+        bail!(
+            "required spine slots unbound: {} — add takes/<slot>.mov",
+            missing.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn discover_takes(from: &Path) -> Result<Vec<DiscoveredTake>> {
+    if !from.is_dir() {
+        bail!("{} is not a take directory", from.display());
+    }
+    let mut found = Vec::new();
+    let mut unknown = Vec::new();
+    for entry in std::fs::read_dir(from)? {
+        let path = entry?.path();
+        if !path.is_file() || !is_take_file(&path) {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        match graft_score::Role::parse(&stem) {
+            Ok(role) => {
+                if found.iter().any(|t: &DiscoveredTake| t.slot == stem) {
+                    bail!("duplicate take for slot {stem} in {}", from.display());
+                }
+                found.push(DiscoveredTake {
+                    slot: stem,
+                    role,
+                    path,
+                });
+            }
+            Err(_) => unknown.push(path),
+        }
+    }
+    for path in &unknown {
+        eprintln!("skip unknown take {}", path.display());
+    }
+    found.sort_by_key(|t| {
+        ROLE_ORDER
+            .iter()
+            .position(|id| *id == t.slot)
+            .unwrap_or(ROLE_ORDER.len())
+    });
+    Ok(found)
+}
+
+fn list_pool_takes(from: &Path) -> Result<Vec<PathBuf>> {
+    if !from.is_dir() {
+        bail!("{} is not a take directory", from.display());
+    }
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(from)? {
+        let path = entry?.path();
+        if path.is_file() && is_take_file(&path) {
+            files.push(path);
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn is_take_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| TAKE_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+fn dest_from_takes(takes: &[DiscoveredTake]) -> Result<(FrameRate, Option<(u32, u32)>)> {
+    for take in takes {
+        if let Ok(probe) = graft_compile::probe_path(&take.path) {
+            if probe.width > 0 && probe.height > 0 {
+                let rate = FrameRate::from_f64(probe.fps).unwrap_or_else(|_| FrameRate::new(30, 1));
+                return Ok((rate, Some((probe.width, probe.height))));
+            }
+        }
+    }
+    Ok((FrameRate::new(30, 1), None))
+}
+
+fn slots_from_takes(takes: &[DiscoveredTake], rate: FrameRate) -> Result<Vec<Slot>> {
+    let mut cursor = 0_i64;
+    let mut spine = Vec::new();
+    let mut overlays = Vec::new();
+    for take in takes {
+        let duration = take_duration_frames(take, rate)?;
+        if take.role.is_spine() {
+            let range = FrameRange::new(cursor, duration);
+            cursor += duration as i64;
+            let window = if take.role == graft_score::Role::Hook {
+                Some(hook_window(rate, range))
+            } else {
+                None
+            };
+            spine.push(Slot {
+                id: take.slot.clone(),
+                role: take.role,
+                range,
+                optional: false,
+                window,
+            });
+        } else {
+            overlays.push(take);
+        }
+    }
+    if cursor <= 0 {
+        cursor = rate.frames_from_seconds(3.0)?.max(1);
+    }
+    let full = FrameRange::new(0, cursor as u64);
+    let mut slots = spine;
+    for take in overlays {
+        slots.push(Slot {
+            id: take.slot.clone(),
+            role: take.role,
+            range: full,
+            optional: true,
+            window: None,
+        });
+    }
+    if slots.is_empty() {
+        bail!("no slots from takes");
+    }
+    Ok(slots)
+}
+
+fn take_duration_frames(take: &DiscoveredTake, rate: FrameRate) -> Result<u64> {
+    if let Ok(probe) = graft_compile::probe_path(&take.path) {
+        let frames = rate.frames_from_seconds(probe.duration_s)?.max(1) as u64;
+        return Ok(frames);
+    }
+    let bytes = std::fs::read(&take.path)?;
+    match probe_bytes(&bytes) {
+        MaterialKind::Media(probe) => Ok(rate.frames_from_seconds(probe.duration_s)?.max(1) as u64),
+        MaterialKind::Gfi1 { nframes, .. } => Ok(nframes.max(1) as u64),
+        MaterialKind::Opaque { .. } if take.role == graft_score::Role::Captions => {
+            Ok(rate.frames_from_seconds(3.0)?.max(1) as u64)
+        }
+        _ => bail!("cannot probe duration for {}", take.path.display()),
+    }
+}
+
+fn hook_window(rate: FrameRate, hook: FrameRange) -> Window {
+    let three = rate.frames_from_seconds(3.0).unwrap_or(90).max(1) as u64;
+    let duration = hook.duration.min(three);
+    Window {
+        kind: "hook_rate".into(),
+        range: FrameRange::new(hook.start, duration),
+    }
+}
+
+fn ledger_from_plan(
+    scion: &str,
+    plan: &graft_compile::CompilePlan,
+    encode_ms: u64,
+    encoded: bool,
+    build: &BuildRecord,
+) -> serde_json::Value {
+    let dirty: Vec<String> = plan
+        .slots
+        .iter()
+        .filter(|slot| slot.cache == "miss")
+        .map(|slot| slot.id.clone())
+        .collect();
+    let kerfs: Vec<Vec<String>> = plan
+        .kerfs
+        .iter()
+        .filter(|kerf| kerf.cache == "miss")
+        .map(|kerf| kerf.join.clone())
+        .collect();
+    let clean: Vec<serde_json::Value> = plan
+        .slots
+        .iter()
+        .filter(|slot| slot.cache == "hit")
+        .map(|slot| {
+            serde_json::json!({
+                "id": slot.id,
+                "cache": slot.cache,
+                "blob": slot.blob
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "scion": scion,
+        "dirty": dirty,
+        "kerfs": kerfs,
+        "clean": clean,
+        "encode_ms": encode_ms,
+        "encoded": encoded,
+        "out": build.output,
+        "build": build.id
+    })
+}
+
+fn print_ledger_table(ledger: &serde_json::Value) {
+    let scion = ledger["scion"].as_str().unwrap_or("-");
+    let ms = ledger["encode_ms"].as_u64().unwrap_or(0);
+    eprintln!("reuse  scion={scion}  encode={:.2}s", ms as f64 / 1000.0);
+    if let Some(dirty) = ledger["dirty"].as_array() {
+        let names: Vec<&str> = dirty.iter().filter_map(|v| v.as_str()).collect();
+        if !names.is_empty() {
+            eprintln!("dirty  {}", names.join(", "));
+        }
+    }
+    if let Some(kerfs) = ledger["kerfs"].as_array() {
+        for kerf in kerfs {
+            if let Some(pair) = kerf.as_array() {
+                let left = pair.first().and_then(|v| v.as_str()).unwrap_or("?");
+                let right = pair.get(1).and_then(|v| v.as_str()).unwrap_or("?");
+                eprintln!("kerf   {left}→{right}");
+            }
+        }
+    }
+    if let Some(clean) = ledger["clean"].as_array() {
+        for slot in clean {
+            let id = slot["id"].as_str().unwrap_or("?");
+            let blob = slot["blob"].as_str().unwrap_or("-");
+            eprintln!("clean  {id}  {}  hit", short_blob(blob));
+        }
+    }
+    if let Some(out) = ledger["out"].as_str() {
+        eprintln!("out    {out}");
+    }
+}
+
+fn short_blob(blob: &str) -> &str {
+    blob.get(..19).unwrap_or(blob)
+}
+
+fn sanitize_id_part(raw: &str) -> String {
+    let mut out = String::new();
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            out.push(ch);
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    if out.is_empty() {
+        "v".into()
+    } else {
+        out
+    }
+}
+
+fn unique_scion_id(dir: &Path, want: &str) -> Result<String> {
+    let base = sanitize_id_part(want);
+    require_scion_id(&base)?;
+    if !paths::scion(dir, &base).exists() {
+        return Ok(base);
+    }
+    for i in 2..1000 {
+        let id = format!("{base}-{i}");
+        if !paths::scion(dir, &id).exists() {
+            return Ok(id);
+        }
+    }
+    bail!("could not allocate scion id from {base}")
+}
+
+fn unique_feedback_id(dir: &Path, kind: &str) -> Result<String> {
+    let base = sanitize_id_part(kind);
+    if !paths::feedback(dir, &base).exists() {
+        return Ok(base);
+    }
+    for i in 2..1000 {
+        let id = format!("{base}-{i}");
+        if !paths::feedback(dir, &id).exists() {
+            return Ok(id);
+        }
+    }
+    Ok(uuid::Uuid::new_v4().to_string())
 }
 
 pub fn status(dir: &Path) -> Result<()> {

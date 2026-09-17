@@ -11,9 +11,14 @@ A fresh local workspace must complete:
 > concept → scions → team iteration → shipped build → platform signal →
 > addressed slot → new scion
 
-That loop is implemented and tagged `v0.2.0`. Overlay roles, named fades,
-and HTTP/S3 store transport are tagged `v0.2.1`. Remaining honesty work
-is crates.io still unpublished.
+The **IR** for that loop is tagged `v0.2.0`. Overlay roles, named fades,
+and HTTP/S3 store transport are tagged `v0.2.1`. That tag is user-false
+without porcelain: eight plumbing verbs, `iterate` with empty layers, and
+plan-only examples. ADR 0009 closes the **user** loop on the same schema:
+`ship` / `swap` / `address` plus a reuse ledger. crates.io crate name
+`graft` is taken (orbitinghail storage engine), so crates stay
+`publish = false`. Distro listings wait on each community
+([install.md](install.md), [packaging.md](packaging.md)).
 
 ## Implemented
 
@@ -28,6 +33,9 @@ is crates.io still unpublished.
 - Scoped OTIO export/import with a machine-readable loss report.
 - Local decode-and-composite preview with synced audio and overlay mix.
 - Named fade kerfs; HTTP/S3 object-store transport (same compiler).
+- Porcelain user loop (ADR 0009): `takes/` on-ramp, `graft ship`,
+  `graft swap` (single take or `--from` pool), `graft address`, reuse
+  ledger on every encode. `swap` fails if a sibling `slot_encode` recodes.
 
 ## Still later / never in core
 

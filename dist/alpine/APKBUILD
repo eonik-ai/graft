@@ -1,0 +1,25 @@
+# Contributor: eonik <connect@eonik.ai>
+# Maintainer: eonik <connect@eonik.ai>
+pkgname=graft
+pkgver=0.2.2
+pkgrel=0
+pkgdesc="Change the hook. Keep the body."
+url="https://github.com/eonik-ai/graft"
+arch="x86_64 aarch64"
+license="Apache-2.0"
+depends="ffmpeg"
+makedepends="cargo cargo-auditable"
+source="graft-$pkgver.tar.gz::https://github.com/eonik-ai/graft/archive/refs/tags/v$pkgver.tar.gz"
+options="net"
+
+build() {
+	cargo auditable build --release --locked --bin graft
+}
+
+check() {
+	./target/release/graft --version
+}
+
+package() {
+	install -Dm755 target/release/graft -t "$pkgdir"/usr/bin/
+}

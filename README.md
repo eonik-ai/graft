@@ -34,22 +34,33 @@
 
 The score is source. Essence is immutable. The mp4 is a compile.
 
-The founding loop is concept → scions → team iteration → shipped build →
-signal → addressed slot → new scion. Git owns recipe history; graft owns
-composition semantics and compilation; CAS stores immutable source material;
-the action cache keeps derived encodes.
+Ship the next cut without recutting the tree. The founding loop is
+concept → scions → team iteration → shipped build → signal → addressed
+slot → new scion. Git owns recipe history; graft owns composition
+semantics and compilation; CAS stores immutable source material; the
+action cache keeps derived encodes.
 
-Change a hook and compile again: `graft` encodes the hook, bitstream-copies
-the body, and links a new dest. A platform signal against that exact build
-names the hook without recutting the tree.
+Drop a new hook and compile again: `graft swap` encodes the hook,
+bitstream-copies the body, and links a new dest. A platform signal
+against that exact build names the hook without recutting the tree.
 
-![graft CLI compiling, rebinding a hook, and keeping body and cta clean](docs/assets/landing.gif)
+![graft CLI shipping a cut, swapping a hook, and keeping body and cta clean](docs/assets/landing.gif)
 
 _A real local session, recorded with [asciinema](https://github.com/asciinema/asciinema).
 The replay source is [`landing.cast`](docs/assets/landing.cast)._
 
+![Takes become dest v1; swap the hook and dest v2 keeps the body](docs/assets/walkthrough.gif)
+
+_Input plates on the left dest, swapped hook on the right. Generate it with
+`make walkthrough`. The mp4 is gitignored; this GIF is the still._
+
 ## What graft can do today
 
+- Ship a first dest from a named `takes/` folder (`graft ship`)
+- Swap one slot onto a new take, or a folder of takes, without recoding
+  clean siblings (`graft swap`); fail if a sibling recodes
+- Address a named signal to the slot that must change (`graft address`)
+- Print a reuse ledger on every encode: dirty slots, clean BlobIds, time
 - Keep one concept and many inherited scions as Git-tracked recipes
 - Bind by scion and layer; flatten strongest-layer opinions
 - Show semantic diff and three-way merge without merging media
@@ -86,15 +97,36 @@ Breaking schema changes need an RFC.
 ## Get started
 
 Runtime: **ffmpeg** and **ffprobe** on `PATH` (or `$FFMPEG` / `$FFPROBE`).
-graft shells out; it does not link GPL x264. Rust 1.85+ (`rustup`).
+graft shells out; it does not link GPL x264.
+
+**macOS (Homebrew)** — this repo is the tap:
+
+```sh
+brew tap eonik-ai/graft https://github.com/eonik-ai/graft
+brew install graft
+```
+
+**Linux / macOS binary:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/eonik-ai/graft/main/scripts/install.sh | sh
+```
+
+GitHub Releases ship macOS arm64 and Intel, Linux gnu (amd64 and arm64),
+Linux musl (amd64), and `.deb` packages. Nix: `nix run github:eonik-ai/graft`.
+Packager recipes for AUR, Alpine, Fedora, Debian, MacPorts, and the rest of
+the [pkg.bot](https://pkg.bot/repos) families live in [`dist/`](dist/README.md)
+and are **not listed until those distros accept them**.
+
+From source (Rust 1.85+, `rustup`):
 
 ```sh
 cargo install --git https://github.com/eonik-ai/graft.git --locked --bin graft
-graft --help
+graft --version
 ```
 
-GitHub Release binaries arrive when a `v0.2.*` tag is cut: macOS arm64 and
-Linux x64. crates.io is not published yet (`publish = false`).
+crates.io crate name `graft` is taken by another project. Do not
+`cargo install graft` from crates.io. Details: [docs/install.md](docs/install.md).
 
 From a clone:
 
@@ -106,8 +138,55 @@ make test
 
 Your first compile:
 
+```
+takes/
+  hook.mov
+  body.mov
+  cta.mov
+```
+
 ```sh
 mkdir ad && cd ad
+# put the three files in takes/
+graft ship --out ad.mp4
+```
+
+`graft ship` fails if it cannot encode a dest (ffmpeg missing, or no real
+takes). `graft compile` on JSON examples stays plan-only.
+
+`.graft/` is local CAS and builds; do not commit it. Recipe history is Git.
+See [docs/history.md](docs/history.md). The user loop is [docs/loop.md](docs/loop.md).
+
+Play `ad.mp4`. Drop a different hook:
+
+```sh
+graft swap hook ./takes/hooks/v2.mov --out ad-v2.mp4
+```
+
+The reuse ledger names `hook` dirty and `body` / `cta` clean; their encoded
+bytes are reused. `swap` exits non-zero if a sibling recoded.
+
+Address a platform metric through the shipped build:
+
+```sh
+graft address --kind hook_rate --build <build-id>
+graft swap hook ./takes/hooks/v3.mov --out ad-v3.mp4
+```
+
+`address` dirties `hook` plus the hook→body kerf, not `body`. It forks a
+change request; it does not invent the replacement clip.
+
+Batch a take pool against the same body:
+
+```sh
+graft swap hook --from ./takes/hooks --out-dir ./out
+```
+
+### Plumbing
+
+The same walk as explicit verbs (porcelain calls these):
+
+```sh
 graft init
 graft slot body --span 3-20
 graft slot cta --span 20-23 --role cta
@@ -116,9 +195,9 @@ graft bind hook ./hook.mov
 graft bind body ./body.mov
 graft bind cta ./cta.mov
 graft compile --out ad.mp4
+git add score.json scions
+git commit -m "picture scion"
 ```
-
-Play `ad.mp4`. Fork a hook scion and bind a different take:
 
 ```sh
 graft scion fork 9x16 hook-v2
@@ -128,21 +207,14 @@ graft compile --scion hook-v2 --out ad-v2.mp4
 graft dirty --scion hook-v2
 ```
 
-`graft dirty` names `hook` and its hook→body kerf. `body` and `cta` are clean;
-their encoded bytes are reused.
-
-Address a platform metric through the shipped build:
-
 ```sh
 graft signal --kind hook_rate --build <build-id>
 graft iterate --from <build-id> --feedback <id> --scion hook-v3
 ```
 
-That dirties `hook` plus the hook→body kerf, not `body`. `iterate` forks a
-change request; it does not invent the replacement clip.
-
 The worked example is JSON only (placeholder hashes, no media in git), so its
-compile prints a **plan**. Your own clips compile to mp4.
+compile prints a **plan**. Your own clips compile to mp4. `make demo` walks
+ship → swap → address → swap. `make walkthrough` writes the side-by-side GIF.
 
 ## Security
 
@@ -154,7 +226,8 @@ vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
 | | |
 |---|---|
-| Why graft exists | [Mission](docs/mission.md) · [principles](docs/principles.md) |
+| Why graft exists | [Mission](docs/mission.md) · [principles](docs/principles.md) · [loop](docs/loop.md) · [history](docs/history.md) |
+| Install | [install](docs/install.md) · [packaging](docs/packaging.md) · [walkthrough](docs/walkthrough.md) |
 | Compiler contract | [Architecture](docs/architecture.md) · [cache and kerfs](docs/compile.md) · [time map](docs/time-map.md) |
 | Machine contract | [JSON Schema](schema/) · [worked example](examples/hook-v3-body-v1-9x16/) |
 | Boundaries | [git, OTIO, IMF, ffmpeg concat](docs/comparison.md) · [adapter loss matrix](docs/adapters.md) |

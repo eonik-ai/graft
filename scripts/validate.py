@@ -90,6 +90,10 @@ def main() -> int:
         "time-map.json": (SCHEMA / "time-map.schema.json", structural_time_map),
     }
     for example in sorted(p for p in EXAMPLES.iterdir() if p.is_dir()):
+        score_path = example / "score.json"
+        if not score_path.exists():
+            print(f"ok walk {example.relative_to(REPO)} (no JSON fixtures)")
+            continue
         for name, (schema_path, struct) in checks.items():
             path = example / name
             if not path.exists():

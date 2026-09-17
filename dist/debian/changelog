@@ -1,0 +1,6 @@
+graft (0.2.2-1) unstable; urgency=low
+
+  * Packager recipe for the Debian family. Not in the archive until an
+    ITP is accepted. Until then, use the .deb on GitHub Releases.
+
+ -- eonik <connect@eonik.ai>  Wed, 16 Sep 2026 13:30:00 +0000

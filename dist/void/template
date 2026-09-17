@@ -1,0 +1,14 @@
+# Template file for 'graft'
+pkgname=graft
+version=0.2.2
+revision=1
+build_style=cargo
+make_build_args="--bin graft"
+hostmakedepends="pkg-config"
+depends="ffmpeg"
+short_desc="Change the hook. Keep the body."
+maintainer="eonik <connect@eonik.ai>"
+license="Apache-2.0"
+homepage="https://github.com/eonik-ai/graft"
+distfiles="https://github.com/eonik-ai/graft/archive/refs/tags/v${version}.tar.gz"
+checksum=TODO

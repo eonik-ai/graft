@@ -105,7 +105,7 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
     let path_s = path
         .to_str()
         .ok_or_else(|| EncodeError::Invalid("path".into()))?;
-    let raw = run_ok(
+    let raw = match run_ok(
         &ffprobe,
         &[
             "-v",
@@ -118,14 +118,16 @@ pub fn probe_path(path: &Path) -> Result<Probe, EncodeError> {
             "json",
             path_s,
         ],
-    )
-    .map_err(EncodeError::Invalid)?;
+    ) {
+        Ok(raw) => raw,
+        Err(_) => return probe_audio_only(path),
+    };
     let v: serde_json::Value =
         serde_json::from_slice(&raw).map_err(|e| EncodeError::Invalid(e.to_string()))?;
-    let stream = v
-        .get("streams")
-        .and_then(|s| s.get(0))
-        .ok_or_else(|| EncodeError::Invalid("ffprobe: no video stream".into()))?;
+    let stream = match v.get("streams").and_then(|s| s.get(0)) {
+        Some(stream) => stream,
+        None => return probe_audio_only(path),
+    };
     let width = stream.get("width").and_then(|w| w.as_u64()).unwrap_or(0) as u32;
     let height = stream.get("height").and_then(|h| h.as_u64()).unwrap_or(0) as u32;
     let codec = stream
@@ -235,6 +237,24 @@ fn probe_audio_duration(path: &Path) -> Result<f64, EncodeError> {
                 .and_then(|s| s.parse().ok())
         })
         .ok_or_else(|| EncodeError::Invalid("ffprobe: audio duration missing".into()))
+}
+
+fn probe_audio_only(path: &Path) -> Result<Probe, EncodeError> {
+    let duration_s = probe_audio_duration(path)?;
+    Ok(Probe {
+        duration_s,
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        video_codec: "none".into(),
+        pix_fmt: "none".into(),
+        color_space: "none".into(),
+        time_base: "1/1".into(),
+        frame_count: None,
+        has_audio: true,
+        audio_duration_s: Some(duration_s),
+        starts_on_idr: false,
+    })
 }
 
 fn first_packet_is_keyframe(path: &Path) -> Result<bool, EncodeError> {

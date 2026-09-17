@@ -24,8 +24,13 @@ the team creates a new scion, and the compiler rebuilds only what changed.
 
 graft's job is to make that loop explicit, inspectable, and local-first:
 
+> Ship the next cut without recutting the tree.
 > Name the semantic change. Preserve the other scions. Reuse every clean
 > encode. Name the join you must recut (the kerf). Never recut the tree.
+
+A person runs that job as porcelain: `graft ship`, `graft swap`,
+`graft address`. Plumbing (`bind`, `compile`, `signal`, `iterate`) is what
+those commands call. See [loop.md](loop.md) and ADR 0009.
 
 ## Division of responsibility
 
@@ -57,14 +62,23 @@ graft succeeds when a fresh local workspace can:
 6. exchange a supported OTIO/NLE subset with an explicit loss report; and
 7. run the same compiler locally and against a server store without a second IR.
 
+That IR is not the user walk. A fresh workspace also:
+
+8. ships a first dest from a named `takes/` folder in one command;
+9. swaps one slot onto a new take, reuses every clean `slot_encode`, and
+   prints a reuse ledger a human can read;
+10. addresses a named signal to the slot that must change, then waits for a
+    take — it does not invent the clip.
+
 ## Current state
 
-The repository implements the local workspace loop on schema `0.2.0`: multiple
-tracked scions, layer flattening, semantic diff/merge, exact build
-provenance, declared-window feedback, synchronized audio on the ffmpeg path,
-scoped OTIO interchange, local preview, and object-store transport. The
-compiler is still sequential. It does not remotely execute, lock projects, or
-round-trip NLE effects.
+Schema `0.2.0` and tag `v0.2.0` implement the workspace IR: multiple tracked
+scions, layer flattening, semantic diff/merge, exact build provenance,
+declared-window feedback, synchronized audio on the ffmpeg path, scoped OTIO
+interchange, local preview, and object-store transport. Porcelain (`ship`,
+`swap`, `address`) closes the user loop on that IR (ADR 0009). The compiler
+is still sequential. It does not remotely execute, lock projects, round-trip
+NLE effects, infer slots from pixels, or generate replacement creative.
 
 ## Non-mission
 

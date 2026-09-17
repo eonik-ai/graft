@@ -65,24 +65,95 @@ fn write_color(dir: &Path, name: &str, color: &str, seconds: &str, rate: &str) -
     path
 }
 
+fn write_sine(dir: &Path, name: &str, seconds: &str) -> PathBuf {
+    let ffmpeg = std::env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".into());
+    let path = dir.join(name);
+    let status = Command::new(&ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            &format!("sine=frequency=440:duration={seconds}"),
+            "-c:a",
+            "pcm_s16le",
+            path.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success(), "ffmpeg sine {name}");
+    path
+}
+
+fn copy_video_range(dir: &Path, src: &str, start: &str, duration: &str, dest: &str) -> Vec<u8> {
+    let ffmpeg = std::env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".into());
+    let path = dir.join(dest);
+    let status = Command::new(&ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            dir.join(src).to_str().unwrap(),
+            "-ss",
+            start,
+            "-t",
+            duration,
+            "-an",
+            "-c:v",
+            "copy",
+            "-f",
+            "h264",
+            path.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "ffmpeg copy range {src} {start}+{duration}"
+    );
+    fs::read(&path).unwrap()
+}
+
+#[test]
+fn version_prints_crate_version() {
+    let output = graft().arg("--version").output().expect("graft --version");
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.contains(env!("CARGO_PKG_VERSION")),
+        "version stdout: {text}"
+    );
+}
+
 fn run_ok(dir: &Path, args: &[&str]) -> serde_json::Value {
+    run_ok_full(dir, args).0
+}
+
+fn run_ok_full(dir: &Path, args: &[&str]) -> (serde_json::Value, String) {
     let output = graft()
         .arg("-C")
         .arg(dir)
         .args(args)
         .output()
         .expect("run graft");
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(
         output.status.success(),
-        "graft {} failed\nstdout: {}\nstderr: {}",
+        "graft {} failed\nstdout: {}\nstderr: {stderr}",
         args.join(" "),
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
     );
-    if output.stdout.is_empty() {
-        return serde_json::json!(null);
-    }
-    serde_json::from_slice(&output.stdout).unwrap_or(serde_json::json!(null))
+    let json = if output.stdout.is_empty() {
+        serde_json::json!(null)
+    } else {
+        serde_json::from_slice(&output.stdout).unwrap_or(serde_json::json!(null))
+    };
+    (json, stderr)
 }
 
 fn run_fail(dir: &Path, args: &[&str]) -> String {
@@ -397,6 +468,288 @@ fn compile_is_a_plan_not_an_encoder() {
     let got = run_ok(&dir, &["compile"]);
     assert_eq!(got["plan"]["encode"], false);
     assert_eq!(got["plan"]["dest_id"], "9x16");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn git(dir: &Path, args: &[&str]) -> std::process::Output {
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .args(args)
+        .output()
+        .expect("run git")
+}
+
+fn git_ok(dir: &Path, args: &[&str]) {
+    let output = git(dir, args);
+    assert!(
+        output.status.success(),
+        "git {} failed\nstdout: {}\nstderr: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_stdout(dir: &Path, args: &[&str]) -> String {
+    let output = git(dir, args);
+    assert!(
+        output.status.success(),
+        "git {} failed\nstdout: {}\nstderr: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn git_init_local(dir: &Path) {
+    let template = dir.join(".empty-git-template");
+    fs::create_dir_all(&template).unwrap();
+    git_ok(
+        dir,
+        &[
+            "init",
+            "--template",
+            template.to_str().expect("utf8 template path"),
+        ],
+    );
+    let _ = fs::remove_dir_all(&template);
+    git_ok(dir, &["config", "user.email", "graft-test@invalid"]);
+    git_ok(dir, &["config", "user.name", "graft test"]);
+    git_ok(dir, &["config", "commit.gpgsign", "false"]);
+    fs::write(dir.join(".gitignore"), ".graft/\n*.mp4\n*.mov\n*.mxf\n").unwrap();
+}
+
+fn git_add_commit(dir: &Path, message: &str) {
+    git_ok(dir, &["add", "-A"]);
+    git_ok(dir, &["commit", "-m", message]);
+}
+
+fn git_tracked_names(dir: &Path) -> Vec<String> {
+    git_stdout(dir, &["ls-files"])
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn git_history_names(dir: &Path) -> Vec<String> {
+    git_stdout(dir, &["log", "--name-only", "--pretty=format:"])
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn load_scion_json(dir: &Path, id: &str) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(dir.join(format!("scions/{id}.json"))).unwrap())
+        .unwrap()
+}
+
+/// Git owns recipe revisions. Scion parentage is variant derivation. Builds
+/// and CAS stay out of Git. iterate names a slot; it does not invent a take.
+#[test]
+fn founding_loop_history_is_not_an_mp4() {
+    let dir = tmp("founding-loop");
+    git_init_local(&dir);
+
+    run_ok(&dir, &["init"]);
+    run_ok(&dir, &["slot", "body", "--span", "3-20"]);
+    run_ok(
+        &dir,
+        &[
+            "scion",
+            "create",
+            "picture",
+            "--dest",
+            "1080x1920",
+            "--encoder",
+            "graft-intra",
+        ],
+    );
+    let hook = "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let body = "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let hook_v2 = "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    let body_v2 = "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    run_ok(
+        &dir,
+        &[
+            "bind", "hook", hook, "--in", "0", "--out", "3", "--scion", "picture",
+        ],
+    );
+    run_ok(
+        &dir,
+        &[
+            "bind", "body", body, "--in", "0", "--out", "17", "--scion", "picture",
+        ],
+    );
+
+    let status = run_ok(&dir, &["status"]);
+    assert_eq!(status["git_repository"], true);
+    assert!(status["recipe_files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f == "score.json"));
+    assert!(status["recipe_files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f == "scions/picture.json"));
+    assert!(status["note"]
+        .as_str()
+        .unwrap()
+        .contains("does not replace git"));
+    assert!(!status["commit_ready"].as_array().unwrap().is_empty());
+
+    git_add_commit(&dir, "score and picture scion");
+    let after_commit = run_ok(&dir, &["status"]);
+    assert!(after_commit["commit_ready"].as_array().unwrap().is_empty());
+    let tracked = git_tracked_names(&dir);
+    assert!(tracked.iter().any(|f| f == "score.json"));
+    assert!(tracked.iter().any(|f| f == "scions/picture.json"));
+    assert!(tracked.iter().any(|f| f == ".gitignore"));
+    assert!(!tracked.iter().any(|f| f.starts_with(".graft")));
+    assert!(!tracked.iter().any(|f| f.ends_with(".mp4")));
+
+    let compile = run_ok(&dir, &["compile", "--scion", "picture"]);
+    assert_eq!(compile["plan"]["encode"], false);
+    let picture_build = compile["build"]["id"].as_str().unwrap().to_string();
+    let picture_map = compile["build"]["time_map"].as_str().unwrap().to_string();
+    assert!(dir
+        .join(".graft/builds")
+        .join(&picture_build)
+        .join("build.json")
+        .is_file());
+    assert!(dir.join(&picture_map).is_file());
+    assert!(picture_map.contains(".graft/"));
+    git_ok(&dir, &["add", "-A"]);
+    let porcelain = git_stdout(&dir, &["status", "--porcelain"]);
+    assert!(
+        porcelain.trim().is_empty(),
+        "compile must not dirty Git recipes\n{porcelain}"
+    );
+    let after_compile = git_tracked_names(&dir);
+    assert!(!after_compile.iter().any(|f| f.starts_with(".graft")));
+    assert!(!after_compile.iter().any(|f| f.contains("time-map")));
+    assert_eq!(after_compile, tracked);
+
+    run_ok(&dir, &["scion", "fork", "picture", "hook-v2"]);
+    run_ok(
+        &dir,
+        &[
+            "bind", "hook", hook_v2, "--in", "0", "--out", "3", "--scion", "hook-v2",
+        ],
+    );
+    let hook_child = load_scion_json(&dir, "hook-v2");
+    assert_eq!(hook_child["parent"], "picture");
+    assert_eq!(
+        hook_child["layers"][0]["bindings"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .collect::<Vec<_>>(),
+        vec!["hook"]
+    );
+    let hook_diff = run_ok(&dir, &["diff", "picture", "hook-v2"]);
+    assert_eq!(diff_paths(&hook_diff), vec!["slots.hook.binding"]);
+    git_add_commit(&dir, "fork hook-v2");
+    let hook_commit_parent = git_stdout(&dir, &["log", "-1", "--format=%P"])
+        .trim()
+        .to_string();
+    assert!(!hook_commit_parent.is_empty());
+    assert_ne!(hook_commit_parent, "picture");
+
+    run_ok(&dir, &["scion", "fork", "picture", "body-v2"]);
+    run_ok(
+        &dir,
+        &[
+            "bind", "body", body_v2, "--in", "0", "--out", "17", "--scion", "body-v2",
+        ],
+    );
+    let merged = run_ok(
+        &dir,
+        &["merge", "picture", "hook-v2", "body-v2", "--id", "merged"],
+    );
+    assert!(merged["merged"].is_object());
+    assert_eq!(merged["conflicts"], serde_json::json!([]));
+    let vs_hook = run_ok(&dir, &["diff", "hook-v2", "merged"]);
+    assert_eq!(diff_paths(&vs_hook), vec!["slots.body.binding"]);
+    let vs_body = run_ok(&dir, &["diff", "body-v2", "merged"]);
+    assert_eq!(diff_paths(&vs_body), vec!["slots.hook.binding"]);
+    git_add_commit(&dir, "merge hook-v2 and body-v2");
+
+    let hooked = run_ok(&dir, &["compile", "--scion", "hook-v2"]);
+    let hook_build = hooked["build"]["id"].as_str().unwrap().to_string();
+    assert_ne!(hook_build, picture_build);
+    assert!(dir
+        .join(".graft/builds")
+        .join(&picture_build)
+        .join("build.json")
+        .is_file());
+    assert!(dir
+        .join(".graft/builds")
+        .join(&hook_build)
+        .join("build.json")
+        .is_file());
+
+    let signal = run_ok(
+        &dir,
+        &["signal", "--kind", "hook_rate", "--build", &picture_build],
+    );
+    assert_eq!(json_strings(&signal["slots"]), vec!["hook"]);
+    assert!(json_strings(&signal["clean"]).contains(&"body".to_string()));
+    assert!(!json_strings(&signal["slots"]).contains(&"body".to_string()));
+
+    fs::write(
+        dir.join("hook-rate.json"),
+        serde_json::json!({
+            "id": "fb-hook",
+            "build": picture_build,
+            "kind": "hook_rate"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    run_ok(&dir, &["feedback", "ingest", "hook-rate.json"]);
+    let iterate = run_ok(
+        &dir,
+        &[
+            "iterate",
+            "--from",
+            &picture_build,
+            "--feedback",
+            "fb-hook",
+            "--scion",
+            "hook-v3",
+        ],
+    );
+    assert_eq!(iterate["dirty_slots"], serde_json::json!(["hook"]));
+    assert_eq!(iterate["creative_replacement"], "required");
+    assert_eq!(iterate["parent"], "picture");
+    let child = load_scion_json(&dir, "hook-v3");
+    assert_eq!(child["parent"], "picture");
+    assert!(child["layers"].as_array().unwrap().is_empty());
+    assert_eq!(child["change_request"]["feedback"], "fb-hook");
+    assert_eq!(
+        child["change_request"]["slots"],
+        serde_json::json!(["hook"])
+    );
+    assert!(!serde_json::to_string(&child).unwrap().contains("speed"));
+
+    git_add_commit(&dir, "signal iterate hook-v3");
+    let history_names = git_history_names(&dir);
+    assert!(history_names.iter().any(|f| f == "score.json"));
+    assert!(history_names.iter().any(|f| f == "scions/hook-v3.json"));
+    assert!(history_names.iter().any(|f| f.contains("feedback")));
+    assert!(!history_names.iter().any(|f| f.starts_with(".graft")));
+    assert!(!history_names.iter().any(|f| f.ends_with(".mp4")));
+    let log = git_stdout(&dir, &["log", "--oneline"]);
+    assert!(log.lines().count() >= 3);
+
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -1924,5 +2277,214 @@ fn three_cases_on_one_clock() {
     assert_eq!(diff_paths(&vs_hook), vec!["slots.vo.binding"]);
     let vs_hi = run_ok(&dir, &["diff", "dub-hi", "hook-and-dub"]);
     assert_eq!(diff_paths(&vs_hi), vec!["slots.hook.binding"]);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ship_fails_without_named_takes() {
+    let dir = tmp("ship-empty");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    let err = run_fail(&dir, &["ship"]);
+    assert!(
+        err.contains("no named takes") || err.contains("not a take directory"),
+        "{err}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn address_primes_swap_on_worked_example() {
+    let dir = copy_example();
+    let build = seed_example_build(&dir);
+    let got = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    assert_eq!(got["dirty_slots"], serde_json::json!(["hook"]));
+    assert_eq!(got["creative_replacement"], "required");
+    assert_eq!(got["next"], "graft swap hook <file>");
+    assert_eq!(got["scion"], "hook-next");
+    assert!(dir.join("scions/hook-next.json").is_file());
+    let child: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("scions/hook-next.json")).unwrap())
+            .unwrap();
+    assert_eq!(child["parent"], "hook_v3+body_v1+cta_v1@9x16");
+    assert!(child["layers"]
+        .as_array()
+        .map(|layers| layers.is_empty())
+        .unwrap_or(false));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn swap_hook_prints_reuse_ledger() {
+    if !ffmpeg_available() {
+        eprintln!("skip swap_hook_prints_reuse_ledger — install ffmpeg");
+        return;
+    }
+    let dir = tmp("porcelain-loop");
+    git_init_local(&dir);
+    fs::create_dir_all(dir.join("takes/hooks")).unwrap();
+    write_color(&dir.join("takes"), "hook.mp4", "red", "1", "30");
+    write_color(&dir.join("takes"), "body.mp4", "green", "2", "30");
+    write_color(&dir.join("takes"), "cta.mp4", "yellow", "1", "30");
+    write_sine(&dir.join("takes"), "vo.wav", "4");
+    write_color(&dir.join("takes/hooks"), "v2.mp4", "blue", "1", "30");
+    write_color(&dir.join("takes/hooks"), "v3.mp4", "black", "1", "30");
+    write_color(&dir.join("takes/hooks"), "v4.mp4", "white", "1", "30");
+    fs::write(dir.join("takes/foo.mp4"), b"not-a-role").unwrap();
+    fs::write(dir.join("takes/notes.txt"), b"ignore").unwrap();
+
+    let (shipped, ship_err) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    assert_eq!(shipped["ledger"]["encoded"], true);
+    assert!(
+        ship_err.contains("skip unknown take") && ship_err.contains("foo.mp4"),
+        "{ship_err}"
+    );
+    assert!(ship_err.contains("dirty"), "{ship_err}");
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&warmed, "cta")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+    let cta_blob = plan_slot(&warmed, "cta")["blob"].clone();
+    assert!(body_blob.is_string(), "{body_blob}");
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let parent = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    assert!(
+        shipped["plan"]["overlay_audio"]
+            .as_array()
+            .is_some_and(|slots| slots.iter().any(|slot| slot["id"] == "vo")),
+        "ship should bind takes/vo.wav: {}",
+        shipped["plan"]
+    );
+
+    git_add_commit(&dir, "ship recipes");
+    let tracked = git_tracked_names(&dir);
+    assert!(tracked.iter().any(|f| f == "score.json"), "{tracked:?}");
+    assert!(
+        tracked.iter().any(|f| f.starts_with("scions/")),
+        "{tracked:?}"
+    );
+    assert!(
+        !tracked.iter().any(|f| f.starts_with(".graft")),
+        "{tracked:?}"
+    );
+    assert!(!tracked.iter().any(|f| f.ends_with(".mp4")), "{tracked:?}");
+
+    let (swapped, swap_err) = run_ok_full(
+        &dir,
+        &["swap", "hook", "takes/hooks/v2.mp4", "--out", "ad-v2.mp4"],
+    );
+    assert!(dir.join("ad-v2.mp4").is_file());
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "cta")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_slot(&swapped, "cta")["blob"], cta_blob);
+    let clean_ids: Vec<&str> = swapped["ledger"]["clean"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|slot| slot["id"].as_str())
+        .collect();
+    assert!(clean_ids.contains(&"body"), "{clean_ids:?}");
+    assert!(clean_ids.contains(&"cta"), "{clean_ids:?}");
+    assert!(!swapped["ledger"]["dirty"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|slot| slot == "body"));
+    assert!(swap_err.contains("clean  body"), "{swap_err}");
+    assert!(swap_err.contains("dirty  hook"), "{swap_err}");
+    let body_in_v1 = copy_video_range(&dir, "ad.mp4", "1", "2", "body-v1.h264");
+    let body_in_v2 = copy_video_range(&dir, "ad-v2.mp4", "1", "2", "body-v2.h264");
+    assert!(
+        !body_in_v1.is_empty() && body_in_v1 == body_in_v2,
+        "body GOP inside the linked dest must match across a hook swap"
+    );
+    assert_ne!(
+        fs::read(dir.join("ad.mp4")).unwrap(),
+        fs::read(dir.join("ad-v2.mp4")).unwrap()
+    );
+
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    assert_eq!(addressed["next"], "graft swap hook <file>");
+    assert_eq!(addressed["creative_replacement"], "required");
+    let primed = addressed["scion"].as_str().unwrap().to_string();
+    let child = load_scion_json(&dir, &primed);
+    assert!(child["layers"]
+        .as_array()
+        .map(|layers| layers.is_empty())
+        .unwrap_or(false));
+    let after_address = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/hooks/v3.mp4",
+            "--scion",
+            &primed,
+            "--out",
+            "ad-v3.mp4",
+        ],
+    );
+    assert!(dir.join("ad-v3.mp4").is_file());
+    assert_eq!(plan_slot(&after_address, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&after_address, "body")["blob"], body_blob);
+
+    git_add_commit(&dir, "address hook-next");
+    let history_names = git_history_names(&dir);
+    assert!(
+        history_names.iter().any(|f| f.starts_with("feedback/")),
+        "{history_names:?}"
+    );
+    assert!(
+        history_names
+            .iter()
+            .any(|f| f == &format!("scions/{primed}.json")),
+        "{history_names:?}"
+    );
+    assert!(
+        !history_names
+            .iter()
+            .any(|f| f.starts_with(".graft") || f.ends_with(".mp4")),
+        "{history_names:?}"
+    );
+
+    let batch = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "--from",
+            "takes/hooks",
+            "--out-dir",
+            "out",
+            "--scion",
+            &parent,
+        ],
+    );
+    assert_eq!(batch["variants"].as_array().unwrap().len(), 3);
+    for variant in batch["variants"].as_array().unwrap() {
+        assert_eq!(plan_slot(variant, "body")["cache"], "hit");
+        assert_eq!(plan_slot(variant, "body")["blob"], body_blob);
+    }
+
+    fs::remove_dir_all(dir.join(".graft/actions")).unwrap();
+    let err = run_fail(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/hooks/v4.mp4",
+            "--scion",
+            &parent,
+            "--out",
+            "ad-fail.mp4",
+        ],
+    );
+    assert!(
+        err.contains("recoded clean siblings") && err.contains("principle 14"),
+        "{err}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

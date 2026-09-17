@@ -1,0 +1,28 @@
+# Copyright 2026 eonik
+# Distributed under the terms of the GNU General Public License v2
+
+EAPI=8
+
+CRATES=""
+inherit cargo
+
+DESCRIPTION="Change the hook. Keep the body."
+HOMEPAGE="https://github.com/eonik-ai/graft"
+SRC_URI="https://github.com/eonik-ai/graft/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
+
+LICENSE="Apache-2.0"
+SLOT="0"
+KEYWORDS="~amd64 ~arm64"
+
+RDEPEND="media-video/ffmpeg"
+DEPEND="${RDEPEND}"
+BDEPEND="virtual/rust"
+
+src_configure() {
+	cargo_src_configure --bin graft
+}
+
+src_install() {
+	cargo_src_install --path crates/graft
+	dodoc README.md
+}

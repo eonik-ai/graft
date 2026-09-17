@@ -8,7 +8,8 @@
 # Writes docs/assets/landing.cast (source) and docs/assets/landing.gif (GitHub).
 set -eu
 cd "$(dirname "$0")/.."
-export PATH="$PWD/target/release:$PATH"
+GRAFT="$(sh scripts/graft-bin.sh)"
+export PATH="$(dirname "$GRAFT"):$PATH"
 
 need() {
   if ! command -v "$1" >/dev/null; then
@@ -31,7 +32,7 @@ asciinema rec \
   --output-format asciicast-v2 \
   --command "cd \"$DEMO\" && sh \"$PWD/scripts/landing-session.sh\"" \
   --window-size 88x20 \
-  --title "graft: compile, rebind the hook, body stays" \
+  --title "graft: ship, swap the hook, body stays" \
   --idle-time-limit 1.2 \
   --headless \
   --return \

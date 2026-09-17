@@ -20,27 +20,95 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: graft-x86_64-unknown-linux-gnu
+            target: ""
+            extra: ""
+          - os: ubuntu-24.04-arm
+            artifact: graft-aarch64-unknown-linux-gnu
+            target: ""
+            extra: ""
+          - os: ubuntu-latest
+            artifact: graft-x86_64-unknown-linux-musl
+            target: x86_64-unknown-linux-musl
+            extra: musl
           - os: macos-latest
             artifact: graft-aarch64-apple-darwin
+            target: ""
+            extra: ""
+          - os: macos-13
+            artifact: graft-x86_64-apple-darwin
+            target: ""
+            extra: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
+        if: matrix.target == ''
         with:
           toolchain: 1.98.1
+      - uses: dtolnay/rust-toolchain@master
+        if: matrix.target != ''
+        with:
+          toolchain: 1.98.1
+          targets: ${{ matrix.target }}
+      - name: musl
+        if: matrix.extra == 'musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: build
-        run: cargo build --release --locked --bin graft
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --locked --bin graft --target "${{ matrix.target }}"
+          else
+            cargo build --release --locked --bin graft
+          fi
       - name: pack
         run: |
-          mkdir -p dist
-          bin="target/release/graft"
-          if [ -f target/release/graft.exe ]; then bin=target/release/graft.exe; fi
+          mkdir -p dist/pkg
+          if [ -n "${{ matrix.target }}" ]; then
+            bin="target/${{ matrix.target }}/release/graft"
+          else
+            bin="target/release/graft"
+          fi
           cp "$bin" "dist/${{ matrix.artifact }}"
-          chmod +x "dist/${{ matrix.artifact }}" || true
+          chmod +x "dist/${{ matrix.artifact }}"
+          tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.extra }}" != "musl" ]; then
+            ver="${GITHUB_REF_NAME#v}"
+            arch=amd64
+            case "${{ matrix.artifact }}" in
+              *aarch64*) arch=arm64 ;;
+            esac
+            rm -rf dist/deb
+            mkdir -p dist/deb/DEBIAN dist/deb/usr/bin
+            cp "$bin" dist/deb/usr/bin/graft
+            chmod 0755 dist/deb/usr/bin/graft
+            printf '%s\n' \
+              "Package: graft" \
+              "Version: ${ver}" \
+              "Section: video" \
+              "Priority: optional" \
+              "Architecture: ${arch}" \
+              "Maintainer: eonik <connect@eonik.ai>" \
+              "Depends: ffmpeg" \
+              "Homepage: https://github.com/eonik-ai/graft" \
+              "Description: Change the hook. Keep the body." \
+              " Local-first composition workspace. Incremental compiler for video." \
+              > dist/deb/DEBIAN/control
+            dpkg-deb --build dist/deb "dist/graft_${ver}_${arch}.deb"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && matrix.extra != 'musl'
+        with:
+          name: ${{ matrix.artifact }}-deb
+          path: dist/*.deb
 
   github-release:
     needs: binaries
@@ -51,10 +119,15 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: checksums
+        run: |
+          cd dist
+          sha256sum graft-* *.tar.gz *.deb 2>/dev/null | sort > SHA256SUMS || true
+          cat SHA256SUMS
       - name: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/* \
+          gh release create "${GITHUB_REF_NAME}" dist/graft-* dist/*.tar.gz dist/*.deb dist/SHA256SUMS \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Schema format id is 0.2.0. Needs ffmpeg on PATH. crates.io is not published (\`publish = false\`)."
+            --notes "Schema format id is 0.2.0. Needs ffmpeg on PATH. See docs/install.md. crates.io name graft is taken (orbitinghail); this CLI stays unpublished there. Distro recipes in dist/ are not yet listed on pkg.bot."

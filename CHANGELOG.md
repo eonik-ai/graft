@@ -5,17 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The `graft` field on JSON is a format id (`0.2.0`), not a crate version.
 First compiler GitHub tag is `v0.2.0`. Do not reuse spec tag `v0.1.0`.
-crates.io is not published (`publish = false`).
+crates.io crate name `graft` is taken (orbitinghail storage engine).
+This project's crates stay `publish = false`.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-16
+
+Porcelain closes the founding user loop. Schema format id stays `0.2.0`.
+crates.io crate name `graft` is taken; this CLI is not published there.
+
 ### Added
 
+- Porcelain user loop (ADR 0009): `graft ship` from `takes/`, `graft swap`
+  of one slot (or `--from` a take pool), `graft address` to prime the next
+  swap. Every encode prints a reuse ledger. `ship` fails if it cannot
+  encode a dest. `swap` fails if a sibling `slot_encode` recoded. See
+  [`docs/loop.md`](docs/loop.md). Locale README siblings are stale for the
+  `ship` encode-fail sentence and the install block.
+- Install surface for a public cut: Homebrew tap in this repo
+  (`Formula/graft.rb`), `scripts/install.sh`, Nix flake, GitHub Release
+  tarballs for macOS arm64/x86_64 and Linux gnu+musl, `.deb` packages.
+  Packager recipes for the [pkg.bot](https://pkg.bot/repos) families live
+  in [`dist/`](dist/README.md) and are not a listing until those distros
+  accept them. See [`docs/install.md`](docs/install.md) and
+  [`docs/packaging.md`](docs/packaging.md).
+- Visual walkthrough: `make walkthrough` writes labeled takes, ships,
+  swaps the hook, and records a side-by-side GIF
+  ([`docs/assets/walkthrough.gif`](docs/assets/walkthrough.gif)). Body GOP
+  bytes inside the linked dest are compared across the swap.
+- Every [pkg.bot](https://pkg.bot/repos) repository maps to a packager
+  recipe in [`dist/pkg.bot-repos.md`](dist/pkg.bot-repos.md). crates.io
+  name `graft` is taken; GitHub Releases + Homebrew tap + Nix flake are
+  the published install paths.
+- Founding-loop history walk: Git owns recipe revisions, scion `parent` is
+  variant derivation, `.graft/` stays out of Git. See
+  [`docs/history.md`](docs/history.md). CLI test
+  `founding_loop_history_is_not_an_mp4`.
 - Worked example [`examples/dub-en-9x16/`](examples/dub-en-9x16/): 10s
-  clock cut from real Veo clips with inherited `picture` / `dub-en` /
-  `dub-hi` scions. `vo_hold` dirties `vo` + `audio_mix`, not `body`.
-  Explicit dest `note` at 3–5s and `hold` name overlapping body. Iterate
-  still does not invent `params.speed`. Bindings are BLAKE3 of local
+  clock dirty-set contract (picture → `dub-en` / `dub-hi` inherit,
+  `vo_hold`, explicit 3–5s `note`, `hold` on body). Not a dubbed film:
+  `audio_mix` is spine AAC plus overlay. Bindings are BLAKE3 of local
   essence; mp4s stay out of git.
 
 ## [0.2.1] - 2026-09-14
@@ -102,7 +132,8 @@ release.
 - Worked example `hook_v3 + body_v1 + cta_v1 @ 9x16`.
 - Reference signal → dirty-set implementation and north-star test.
 
-[Unreleased]: https://github.com/eonik-ai/graft/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/eonik-ai/graft/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/eonik-ai/graft/releases/tag/v0.2.2
 [0.2.1]: https://github.com/eonik-ai/graft/releases/tag/v0.2.1
 [0.2.0]: https://github.com/eonik-ai/graft/releases/tag/v0.2.0
 [0.1.0]: https://github.com/eonik-ai/graft/releases/tag/v0.1.0

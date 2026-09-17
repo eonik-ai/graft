@@ -12,7 +12,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Parser, Debug)]
 #[command(
     name = "graft",
-    about = "local-first composition workspace",
+    version,
+    about = "Change the hook. Keep the body.",
     long_about = "The score is source. Essence is immutable. The mp4 is a compile.\n\
                   Git owns recipe history. graft owns scions, layers, and compile."
 )]
@@ -27,7 +28,11 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Write a new score.json (concept UUID, hook 0–3).
-    Init,
+    Init {
+        /// Bind matching files from this take directory.
+        #[arg(long)]
+        from: Option<PathBuf>,
+    },
     /// Add or update a slot on the score.
     Slot {
         id: String,
@@ -144,6 +149,49 @@ enum Command {
         #[command(subcommand)]
         command: StoreCommand,
     },
+    /// First dest from takes/. Creates score/scion if missing.
+    Ship {
+        /// Take directory (named hook.mov, body.mov, …).
+        #[arg(long, default_value = "takes")]
+        from: PathBuf,
+        /// Write the dest file here.
+        #[arg(long, default_value = "ad.mp4")]
+        out: PathBuf,
+        #[arg(long)]
+        scion: Option<String>,
+        /// Dest WxH. Default: probed from the first video take, else 1080x1920.
+        #[arg(long)]
+        dest: Option<String>,
+        #[arg(long, default_value = "x264")]
+        encoder: String,
+    },
+    /// Swap one slot onto a new take. Fails if a clean sibling recodes.
+    Swap {
+        slot: String,
+        /// New take path. Mutually exclusive with --from.
+        file: Option<PathBuf>,
+        /// Directory of takes to swap (volume).
+        #[arg(long, conflicts_with = "file")]
+        from: Option<PathBuf>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long = "out-dir")]
+        out_dir: Option<PathBuf>,
+        #[arg(long)]
+        scion: Option<String>,
+    },
+    /// Resolve a signal, iterate an empty child, name the next swap.
+    Address {
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        t: Option<String>,
+        #[arg(long)]
+        build: String,
+        /// Child scion id. Default: <slot>-next.
+        #[arg(long)]
+        scion: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -229,7 +277,7 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     let dir = &cli.dir;
     match cli.command {
-        Command::Init => cmd::init(dir),
+        Command::Init { from } => cmd::init(dir, from),
         Command::Slot {
             id,
             role,
@@ -295,5 +343,26 @@ fn run() -> Result<()> {
             StoreCommand::Push { remote } => cmd::store_push(dir, remote),
             StoreCommand::Pull { remote } => cmd::store_pull(dir, remote),
         },
+        Command::Ship {
+            from,
+            out,
+            scion,
+            dest,
+            encoder,
+        } => cmd::ship(dir, from, out, scion, dest, encoder),
+        Command::Swap {
+            slot,
+            file,
+            from,
+            out,
+            out_dir,
+            scion,
+        } => cmd::swap(dir, slot, file, from, out, out_dir, scion),
+        Command::Address {
+            kind,
+            t,
+            build,
+            scion,
+        } => cmd::address(dir, kind, t, build, scion),
     }
 }

@@ -37,9 +37,12 @@ that a general text VCS should not own:
 - platform-signal resolution to slots and kerfs; and
 - an action graph that reuses clean derived resources.
 
+Porcelain (`ship` / `swap` / `address`) is how a person runs that loop
+without eight plumbing verbs (ADR 0009).
+
 The current implementation provides those workspace semantics plus the
-incremental compiler. NLE guests remain lossy; only the scoped OTIO subset
-is implemented.
+incremental compiler and that porcelain. NLE guests remain lossy; only the
+scoped OTIO subset is implemented.
 
 ## Closest cousins
 

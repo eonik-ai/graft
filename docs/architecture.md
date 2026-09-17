@@ -24,7 +24,9 @@ concept → scions → team iteration → shipped build
 | Interchange | guest adapters | Supported import/export subset plus loss report |
 
 Scion inheritance is a relationship between variants. Git history is a
-relationship between revisions. They are intentionally separate. See ADR 0007.
+relationship between revisions. They are intentionally separate. See ADR 0007
+and [history.md](history.md) for the founding-loop walk (Git vs parent vs
+`.graft/`).
 
 ## What a video is
 
@@ -297,7 +299,8 @@ Arbitrary-source mid-GOP repair remains later.
 Flags belong in `README.md` only.
 
 The CLI creates, forks, diffs, merges, compiles, ingests feedback, iterates,
-exports/imports OTIO, previews, and syncs an object-store root. Git remains
+exports/imports OTIO, previews, and syncs an object-store root. Porcelain
+`ship` / `swap` / `address` call those verbs (ADR 0009). Git remains
 porcelain-light via `graft status`.
 
 ## Where to put a change

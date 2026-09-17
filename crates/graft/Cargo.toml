@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 [package]
 name = "graft"
-description = "CLI for the graft workspace and compiler"
+description = "Change the hook. Keep the body. Local-first video composition."
+keywords = ["video", "compiler", "ffmpeg", "incremental"]
+categories = ["command-line-utilities", "multimedia"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true

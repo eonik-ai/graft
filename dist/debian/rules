@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+# SPDX-License-Identifier: Apache-2.0
+export DH_VERBOSE = 1
+CARGO_TARGET_DIR = $(CURDIR)/target
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --locked --bin graft
+
+override_dh_auto_install:
+	install -D -m 0755 target/release/graft debian/graft/usr/bin/graft
+
+override_dh_auto_test:
+	./target/release/graft --version
