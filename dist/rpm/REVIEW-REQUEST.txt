@@ -1,0 +1,19 @@
+Package: graft
+Summary: local-first video composition workspace
+URL: https://github.com/eonik-ai/graft
+License: Apache-2.0
+
+Description:
+graft is a local-first composition workspace. The incremental compiler
+is the build engine. Runtime ffmpeg is not linked; graft shells out.
+
+Spec: https://github.com/eonik-ai/graft/blob/main/dist/rpm/graft.spec
+Release: https://github.com/eonik-ai/graft/releases/tag/v0.2.2
+
+This is a Fedora package review request covering Fedora, EPEL, and the
+RHEL clones that follow Fedora (Rocky, Alma, CentOS Stream, Amazon,
+EuroLinux, openEuler via the same spec family). openSUSE/Mageia/OpenMandriva
+can reuse the spec after Fedora lands.
+
+FAS account required to open:
+https://bugzilla.redhat.com/enter_bug.cgi?product=Fedora&component=Package%20Review

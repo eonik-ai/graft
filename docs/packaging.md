@@ -14,6 +14,28 @@ It does not vendor or link x264.
 | `scripts/install.sh` | matching Release tarball, else `cargo --git` |
 | crates.io | **blocked**. Crate name `graft` is [orbitinghail/graft](https://github.com/orbitinghail/graft). Workspace stays `publish = false`. Install with `cargo install --git`. |
 
+## Family submissions (filed 2026-09-17)
+
+One PR per family. pkg.bot clones follow the parent. These are **requests**, not listings, until each community merges.
+
+| Family | Covers (pkg.bot) | Submission |
+| --- | --- | --- |
+| nix | nixpkgs unstable + all stables | https://github.com/NixOS/nixpkgs/pull/564184 |
+| macports | MacPorts | https://github.com/macports/macports-ports/pull/34726 |
+| void | Void Linux | https://github.com/void-linux/void-packages/pull/62574 |
+| openwrt | OpenWrt 24.10 / 23.05 | https://github.com/openwrt/packages/pull/30552 |
+| solus | Solus | https://github.com/getsolus/packages/pull/10718 |
+| pkg | FreeBSD Ports | https://github.com/freebsd/freebsd-ports/pull/624 |
+| slackbuilds | SlackBuilds + Slackware current | https://github.com/SlackBuildsOrg/slackbuilds/pull/17783 |
+| portage | GURU (Gentoo overlay) | branch https://github.com/techievena/guru/tree/graft-0.2.2 — GitHub PRs on GURU need contributor access |
+| brew | macOS (not on pkg.bot) | this repo is the tap; brew-core https://github.com/Homebrew/homebrew-core/pull/311719 (needs template/notability review) |
+| apt | Debian + Ubuntu + all debuntu clones | Debian ITP (see [`dist/debian/ITP`](../dist/debian/ITP)) |
+| rpm | Fedora + EPEL + RHEL clones + openSUSE + Mageia + OpenMandriva | Fedora review needs a FAS/Bugzilla account |
+| aur | AUR, then Arch/Manjaro/Artix/Parabola | AUR SSH account |
+| apk | Alpine edge + stables | GitLab aports account |
+| openbsd | OpenBSD Ports | ports CVS account |
+| binary | BioArch, BlackArch, ArchPOWER | do not file overlays |
+
 ## What this repo does not claim
 
 [pkg.bot/repos](https://pkg.bot/repos) indexes **129** distro repositories.

@@ -19,6 +19,10 @@ This project's crates stay `publish = false`.
   ([`dist/SOURCE`](dist/SOURCE)). Homebrew formula has `url`/`sha256` for
   that tag. Homebrew 7 needs `brew trust --tap eonik-ai/graft` before the
   tap will load.
+- Family submissions filed: nixpkgs, MacPorts, Void, OpenWrt, Solus,
+  FreeBSD Ports, SlackBuilds, Homebrew core. Debian ITP text is
+  [`dist/debian/ITP`](dist/debian/ITP). See
+  [`docs/packaging.md`](docs/packaging.md).
 
 ## [0.2.2] - 2026-09-16
 

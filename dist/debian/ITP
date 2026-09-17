@@ -1,0 +1,34 @@
+To: submit@bugs.debian.org
+Subject: ITP: graft -- local-first video composition workspace
+From: Abinash Senapati <abinashsena@gmail.com>
+X-Debbugs-CC: debian-devel@lists.debian.org
+
+Package: wnpp
+Severity: wishlist
+Owner: Abinash Senapati <abinashsena@gmail.com>
+
+* Package name    : graft
+  Version         : 0.2.2
+  Upstream Contact: eonik <connect@eonik.ai>
+* URL             : https://github.com/eonik-ai/graft
+* License         : Apache-2.0
+  Programming Lang: Rust
+  Description     : local-first video composition workspace
+
+ graft is a local-first composition workspace. The incremental compiler
+ is the build engine. Git owns recipe history; graft owns scions, layers,
+ semantic diff, and compile. Runtime ffmpeg and ffprobe are on PATH;
+ graft shells out and does not link x264.
+
+ This ITP covers the Debian family. Ubuntu, Devuan, Kali, Trisquel,
+ PureOS, Raspbian, Parrot, Pardus, deepin, openKylin, and Apertis take
+ Debian. Until the package is in the archive, the same .deb is on
+ GitHub Releases.
+
+ Packaging files live in the upstream tree under dist/debian/.
+
+ I intend to maintain this package. A sponsor is needed for the first
+ upload.
+
+ Note: crates.io crate name graft is a different program (orbitinghail
+ storage engine). This source is github.com/eonik-ai/graft.
