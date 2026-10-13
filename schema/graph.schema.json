@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:graft:schema:graph:0.2.0",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "graft composition graph",
+  "description": "Timestamped filtergraph. Nodes lower to ffmpeg. Optional on a scion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nodes"],
+  "properties": {
+    "mode": { "enum": ["append", "replace"], "default": "append" },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": { "type": "integer", "minimum": 1 },
+        "den": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "duration": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "timedRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rate", "range"],
+      "properties": {
+        "rate": { "$ref": "#/$defs/rate" },
+        "range": { "$ref": "#/$defs/range" }
+      }
+    },
+    "material": {
+      "type": "string",
+      "pattern": "^blake3:[0-9a-f]{64}$"
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "op"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z#][A-Za-z0-9_#]*$" },
+        "op": { "type": "string", "minLength": 1 },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "material": { "$ref": "#/$defs/material" },
+        "source": { "$ref": "#/$defs/timedRange" },
+        "place": { "$ref": "#/$defs/range" },
+        "enable": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "params": { "type": "object" },
+        "keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/keyframe" }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/node" }
+        }
+      }
+    },
+    "keyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "v"],
+      "properties": {
+        "t": { "type": "number", "minimum": 0 },
+        "v": { "type": "number" },
+        "ease": {
+          "enum": ["hold", "linear", "ease_in", "ease_out", "ease_in_out"]
+        }
+      }
+    }
+  }
+}

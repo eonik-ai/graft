@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::canonical::require_graft_version;
+use crate::graph::{join_is_overlap, validate_join_transition};
 use crate::ident::{require_slot_id, require_uuid};
 use crate::role::{Layer, Role};
 use crate::time::{FrameRange, FrameRate};
@@ -80,8 +81,22 @@ impl Join {
     }
 
     pub fn is_fade(&self) -> bool {
-        self.transition == "fade"
+        join_is_overlap(&self.transition)
     }
+
+    pub fn is_cut(&self) -> bool {
+        matches!(
+            crate::graph::canonical_transition(&self.transition).as_deref(),
+            Ok("cut")
+        ) || self.transition == "cut"
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Marker {
+    pub id: String,
+    pub range: FrameRange,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -99,6 +114,8 @@ pub struct Score {
     pub spill_threshold_frames: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub joins: Vec<Join>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<Marker>,
 }
 
 impl Score {
@@ -153,6 +170,14 @@ impl Score {
             ));
         }
         self.validate_joins()?;
+        for marker in &self.markers {
+            if marker.id.is_empty() {
+                return Err(Error::invalid("marker id is empty"));
+            }
+            marker
+                .range
+                .validate(&format!("marker {}.range", marker.id))?;
+        }
         Ok(())
     }
 
@@ -175,22 +200,17 @@ impl Score {
                     join.left, join.right
                 )));
             }
-            match join.transition.as_str() {
-                "cut" => {}
-                "fade" => {
-                    if join.duration_frames == 0 {
-                        return Err(Error::invalid(format!(
-                            r#"{{"error":"invalid_fade","left":"{}","right":"{}","reason":"duration_frames must be > 0"}}"#,
-                            join.left, join.right
-                        )));
-                    }
-                }
-                other => {
-                    return Err(Error::invalid(format!(
-                        r#"{{"error":"unknown_transition","transition":"{other}","left":"{}","right":"{}"}}"#,
-                        join.left, join.right
-                    )));
-                }
+            if validate_join_transition(&join.transition).is_err() {
+                return Err(Error::invalid(format!(
+                    r#"{{"error":"unknown_transition","transition":"{}","left":"{}","right":"{}"}}"#,
+                    join.transition, join.left, join.right
+                )));
+            }
+            if !join.is_cut() && join.duration_frames == 0 {
+                return Err(Error::invalid(format!(
+                    r#"{{"error":"invalid_fade","left":"{}","right":"{}","reason":"duration_frames must be > 0"}}"#,
+                    join.left, join.right
+                )));
             }
             let Some(left_i) = spine.iter().position(|id| *id == join.left) else {
                 return Err(Error::invalid(format!(
@@ -247,5 +267,118 @@ impl Score {
         if max_end > 0 {
             self.clock.duration_frames = max_end as u64;
         }
+    }
+
+    /// Overlap frames of xfade joins whose score-clock join point is at or
+    /// before `score_frame`. Cut joins contribute 0.
+    pub fn overlap_before(&self, score_frame: i64) -> i64 {
+        let spine = self.spine();
+        let mut n = 0i64;
+        for pair in spine.windows(2) {
+            let join = self.join_between(&pair[0].id, &pair[1].id);
+            if join.is_fade() && pair[1].range.start <= score_frame {
+                n += join.duration_frames as i64;
+            }
+        }
+        n
+    }
+
+    pub fn compiled_frame(&self, score_frame: i64) -> i64 {
+        (score_frame - self.overlap_before(score_frame)).max(0)
+    }
+
+    /// Dest range after each overlap shortens the film. Spine slots keep
+    /// their duration; later starts shift left. Overlay ranges remap both
+    /// ends so a full-clock span still covers the compiled dest.
+    pub fn compiled_range(&self, range: FrameRange) -> FrameRange {
+        let start = self.compiled_frame(range.start);
+        let last = (range.end() - 1).max(range.start);
+        let end = self.compiled_frame(last) + 1;
+        FrameRange::new(start, (end - start).max(1) as u64)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::GRAFT_SCHEMA;
+
+    fn score_with_fade() -> Score {
+        Score {
+            graft: GRAFT_SCHEMA.into(),
+            concept: "11111111-1111-4111-8111-111111111111".into(),
+            clock: Clock {
+                rate: FrameRate::new(10, 1),
+                duration_frames: 40,
+            },
+            slots: vec![
+                Slot {
+                    id: "hook".into(),
+                    role: Role::Hook,
+                    range: FrameRange::new(0, 10),
+                    optional: false,
+                    window: None,
+                },
+                Slot {
+                    id: "body".into(),
+                    role: Role::Body,
+                    range: FrameRange::new(10, 20),
+                    optional: false,
+                    window: None,
+                },
+                Slot {
+                    id: "cta".into(),
+                    role: Role::Cta,
+                    range: FrameRange::new(30, 10),
+                    optional: false,
+                    window: None,
+                },
+            ],
+            layers: vec![Layer::Base],
+            dest_default: None,
+            spill_threshold_frames: DEFAULT_SPILL_FRAMES,
+            joins: vec![Join {
+                left: "hook".into(),
+                right: "body".into(),
+                transition: "fade".into(),
+                duration_frames: 2,
+            }],
+            markers: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn compiled_range_shortens_after_xfade() {
+        let score = score_with_fade();
+        assert_eq!(
+            score.compiled_range(FrameRange::new(0, 10)),
+            FrameRange::new(0, 10)
+        );
+        assert_eq!(
+            score.compiled_range(FrameRange::new(10, 20)),
+            FrameRange::new(8, 20)
+        );
+        assert_eq!(
+            score.compiled_range(FrameRange::new(30, 10)),
+            FrameRange::new(28, 10)
+        );
+        assert_eq!(
+            score.compiled_range(FrameRange::new(0, 40)),
+            FrameRange::new(0, 38)
+        );
+    }
+
+    #[test]
+    fn compiled_range_is_identity_for_cuts() {
+        let mut score = score_with_fade();
+        score.joins.clear();
+        assert_eq!(
+            score.compiled_range(FrameRange::new(10, 20)),
+            FrameRange::new(10, 20)
+        );
+        assert_eq!(
+            score.compiled_range(FrameRange::new(0, 40)),
+            FrameRange::new(0, 40)
+        );
     }
 }

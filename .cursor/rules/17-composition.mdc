@@ -1,0 +1,29 @@
+---
+description: Composition is a timestamped ffmpeg graph. Read docs/composition.md before any graft IR or compile work.
+alwaysApply: true
+---
+
+# Principle 16 — read the composition inventory
+
+Before any schema, compile, adapter, README, host-embed, or “how video
+versioning works” work, read [docs/composition.md](docs/composition.md).
+Do not wait for the user to name LUT, transitions, codecs, or SFX.
+
+- A video is pads + filters + PTS. Roles are labels, not the IR.
+- ffmpeg is the lowerer. Do not invent a compositor.
+- Working cache ≠ delivery codec. Bitstream-copy of H.264 slots cannot
+  version a post-join look.
+- `takes/hook.mov` is not authorship. Hosts bind ranges on library clips.
+- Layers `base`/`copy`/`grade`/`legal` are binding opinions, not grade nodes.
+- New dimensions are **appended** to `docs/composition.md`. Do not start
+  a second inventory. Do not claim the compiler grew because a row exists.
+- If a proposed node cannot lower to libavfilter + an encoder, reject it.
+
+```
+<!-- BAD -->
+swap the hook file, concat -c copy, body stays an 8-bit GOP forever
+
+<!-- GOOD -->
+dirty src_hook and every downstream pad; body working-cache may hit;
+a LUT after the join still re-filters
+```

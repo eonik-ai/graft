@@ -1,11 +1,7 @@
-To: submit@bugs.debian.org
-Subject: ITP: graft -- local-first video composition workspace
-From: Abinash Senapati <abinashsena@gmail.com>
-X-Debbugs-CC: debian-devel@lists.debian.org
-
 Package: wnpp
 Severity: wishlist
 Owner: Abinash Senapati <abinashsena@gmail.com>
+X-Debbugs-CC: debian-devel@lists.debian.org
 
 * Package name    : graft
   Version         : 0.2.2

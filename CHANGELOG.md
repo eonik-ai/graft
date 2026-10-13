@@ -10,8 +10,78 @@ This project's crates stay `publish = false`.
 
 ## [Unreleased]
 
+### Added
+
+- Generic filter lowerer, stored adjustment groups, and eased keys
+  (RFC 0010). A filter-shaped op this ffmpeg has lowers as `key=value`
+  plus `enable=`. A missing filter is `toolchain`. Unknown params fail
+  closed. `adjustments[]` stores `op: group`; compile expands children
+  and inherits `enable=`. Expression options ease in the filter string;
+  numeric options segment with `enable=`. `loudnorm` keeps `dual_mono`.
+- Motion, stepwise time remap, and a multi-cam switch (RFC 0009).
+  `binding.motion` moves an overlay without recoding its source.
+  `binding.remap` folds speed spans in the working path; intra refuses
+  a curve. Nest `switch.cuts` is the host cut list. `graft swap overlay
+  --x --y` edits place without a new file. `graft address` names
+  `angles.switch` when that node covers the signal.
+- Composition inventory: [docs/composition.md](docs/composition.md)
+  (ADR 0010, principle 16). Living list of what a video is — graph,
+  ffmpeg lowerer, families (time, color/LUT, transitions, composite,
+  motion, titles, finish, audio, codecs). Append-only. Agents read it
+  without being asked.
+- Graph compiler (RFC 0003): working-depth nodes (ProRes HQ / PCM), overlap
+  `xfade` / `acrossfade`, optional `scion.graph` (`lut3d`, overlay,
+  gap, …), role `sfx`, compiled dest time map, one delivery encode.
+  Working-source keys omit the delivery encoder. `graft-intra` stays
+  a frame splice.
+
+- Porcelain authors the composition, not only slots:
+  `takes/composition.json` (joins, `dest.working`, graph nodes with
+  `file` refs), plus `look.cube` / `legal.cube` / role media.
+  `graft swap <node>` updates any graph node (LUT, params JSON, or
+  essence). A child with `graph` omitted inherits the parent graph.
+  `graft preview` is `compile`. Sidechain nodes whose inputs are audio
+  slots duck **before** the mix. Finish/grade ops: `eq`, `hue`,
+  `curves`, `colorbalance`, `colortemperature`, `vibrance`, `unsharp`,
+  `vignette`, `noise`, `gblur`, `setrange`, `loudnorm`.
+  Porcelain `composition.json` `slots[]` bind `file` + `in`/`out` on a
+  library clip (C9). `graft swap <slot> file --in --src-out` rebinds a
+  range (`--out` is the dest path). Named `takes/<role>.*` stays a
+  crutch. OTIO sidecar preserves `scion.graph`; native OTIO effects stay lost.
+  J/L: optional `binding.audio.place` and dest-placed spine audio.
+  Keys/shapes: `chromakey`, `colorkey`, `lumakey`, `chromahold`,
+  `alphamerge`, `drawbox`, `drawgrid`, overlay `opacity`. Captions mux
+  into the dest (`mov_text`). RFC 0004.
+  Role `overlay` (extra picture pads). Host join aliases
+  (`dipToBlack` → `fadeblack`). `score.markers`. OTIO sidecar restores
+  `scion.graph` and overlay bindings. `graft address` lists covering
+  nodes. Intra fails closed on a graph. Geometry ops: `setsar`,
+  `setdar`, `perspective`, `shear`, `scroll`, `premultiply`,
+  `streamselect`. Stills `-loop 1`. Porcelain `dest` / `spans` /
+  `markers`. RFC 0005.
+  Three-pad `maskedmerge`, stacks/`mix`, host blend aliases, mixboard
+  audio, chapter mux. OTIO import writes sidecar joins/markers onto
+  the score. Porcelain graph `source` nodes take `in`/`out`. RFC 0006.
+  Nested scion-as-pad: `binding.nested` / graph `nested` compile an
+  inner score to its working `#picture` (not delivery). Porcelain
+  `nests` + slot `"scion"`. Intra fails closed on a nest. RFC 0007.
+  Adjustment groups, overlay place, nest address, color convert
+  (RFC 0008): porcelain `adjustments[]` stamps `enable=` on a node
+  group; `binding.x` / `y` / `opacity` fingerprint `overlay_mix` only;
+  `graft address` names `plate.look` and next is
+  `graft swap look --scion plate`; `colorspace` primaries/trc;
+  `cdl` / `lgg` / `colorcorrect` / `bwdif` / `tile` / `haldclut`.
+
 ### Changed
 
+- Public pages name graft as a **compiler hosts embed**, not a person's
+  workspace. eonik is a host, not this project. Premiere / Resolve /
+  DaVinci stay guests (lossy). English is the only README; locale siblings
+  are removed. See [hosts.md](docs/hosts.md).
+- README / loop / hosts describe the working graph and inherited look,
+  not bitstream-copy of H.264 cells.
+- README example is a real `ship` + `swap` on 9:16 product takes (hook
+  changes, body/cta cache-hit). Color-plate GIFs are no longer the demo.
 - GitHub Release intel macOS binary is cross-compiled on `macos-latest`
   (`--target x86_64-apple-darwin`) so the cut is not blocked on `macos-13`
   runners. `gh release upload --clobber` if the tag already has a release.
@@ -19,10 +89,6 @@ This project's crates stay `publish = false`.
   ([`dist/SOURCE`](dist/SOURCE)). Homebrew formula has `url`/`sha256` for
   that tag. Homebrew 7 needs `brew trust --tap eonik-ai/graft` before the
   tap will load.
-- Family submissions filed: nixpkgs, MacPorts, Void, OpenWrt, Solus,
-  FreeBSD Ports, SlackBuilds, Homebrew core. Living board:
-  [`docs/SUBMISSIONS.md`](docs/SUBMISSIONS.md). Debian ITP text is
-  [`dist/debian/ITP`](dist/debian/ITP).
 
 ## [0.2.2] - 2026-09-16
 
@@ -40,18 +106,15 @@ crates.io crate name `graft` is taken; this CLI is not published there.
 - Install surface for a public cut: Homebrew tap in this repo
   (`Formula/graft.rb`), `scripts/install.sh`, Nix flake, GitHub Release
   tarballs for macOS arm64/x86_64 and Linux gnu+musl, `.deb` packages.
-  Packager recipes for the [pkg.bot](https://pkg.bot/repos) families live
-  in [`dist/`](dist/README.md) and are not a listing until those distros
-  accept them. See [`docs/install.md`](docs/install.md) and
+  Packager recipes live in [`dist/`](dist/README.md); a recipe is not a
+  distro listing. See [`docs/install.md`](docs/install.md) and
   [`docs/packaging.md`](docs/packaging.md).
 - Visual walkthrough: `make walkthrough` writes labeled takes, ships,
   swaps the hook, and records a side-by-side GIF
   ([`docs/assets/walkthrough.gif`](docs/assets/walkthrough.gif)). Body GOP
   bytes inside the linked dest are compared across the swap.
-- Every [pkg.bot](https://pkg.bot/repos) repository maps to a packager
-  recipe in [`dist/pkg.bot-repos.md`](dist/pkg.bot-repos.md). crates.io
-  name `graft` is taken; GitHub Releases + Homebrew tap + Nix flake are
-  the published install paths.
+- crates.io name `graft` is taken; GitHub Releases, the Homebrew tap, and
+  the Nix flake are the published install paths.
 - Founding-loop history walk: Git owns recipe revisions, scion `parent` is
   variant derivation, `.graft/` stays out of Git. See
   [`docs/history.md`](docs/history.md). CLI test

@@ -1,16 +1,19 @@
 # Docs
 
-Start with [mission](mission.md) and [principles](principles.md).
-The machine contract is [`../schema`](../schema/).
+Start with [mission](mission.md), [principles](principles.md), and
+[composition](composition.md). The machine contract is
+[`../schema`](../schema/).
 
 | File | Settles |
 | --- | --- |
 | [mission.md](mission.md) | Why graft exists |
-| [loop.md](loop.md) | User loop: ship, swap, address, takes/, reuse ledger |
+| [hosts.md](hosts.md) | How an app embeds the compiler |
+| [loop.md](loop.md) | Reference CLI: ship, swap, address, takes/, reuse ledger |
 | [install.md](install.md) | Homebrew, GitHub Releases, Nix, cargo, distro recipes |
-| [packaging.md](packaging.md) | How graft enters pkg.bot families; launch checklist |
+| [packaging.md](packaging.md) | Homebrew tap, GitHub Releases, packager recipes in `dist/` |
 | [walkthrough.md](walkthrough.md) | Input takes → dest v1 / v2 film |
 | [principles.md](principles.md) | Non-negotiables |
+| [composition.md](composition.md) | What a video is: timestamped graph, ffmpeg lowerer, living inventory |
 | [glossary.md](glossary.md) | Words |
 | [architecture.md](architecture.md) | Layers, crate graph, pipeline, where code goes |
 | [history.md](history.md) | Git recipe history vs scion parentage vs `.graft/` |
@@ -21,6 +24,6 @@ The machine contract is [`../schema`](../schema/).
 | [comparison.md](comparison.md) | Nearby tools |
 | [roadmap.md](roadmap.md) | Work still ahead |
 | [brand/](brand/) | Mark: two clips, one join |
-| [TRANSLATING.md](TRANSLATING.md) | README locales; English is canonical |
+| [TRANSLATING.md](TRANSLATING.md) | English README only |
 | [adr/](adr/) | Decisions already made |
-| [rfc/](rfc/) | Contract changes. RFC 0001 and RFC 0002 are accepted (`0.2.0`). |
+| [rfc/](rfc/) | Contract changes. RFC 0001–0010 are accepted (`0.2.0`). |

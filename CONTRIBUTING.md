@@ -72,17 +72,14 @@ project lead decides (see [GOVERNANCE.md](GOVERNANCE.md)).
 | signal → dirty rule in `ref/` | `docs/time-map.md`, the worked example `dirty.json` |
 | cache-key formula | `docs/compile.md` |
 | a principle or non-goal | `AGENTS.md` (agents read it) |
-| intended CLI | `README.md` command surface, and every `README.<locale>.md` (or mark locales stale) |
-| English README prose | sibling READMEs in the same PR, or name the stale locales; [docs/TRANSLATING.md](docs/TRANSLATING.md) |
+| intended CLI | `README.md` command surface |
+| English README prose | `README.md` only; see [docs/TRANSLATING.md](docs/TRANSLATING.md) |
 | an ADR | never rewrite history; add a new ADR that supersedes |
 
-## README translations
+## README
 
-English [`README.md`](README.md) is canonical. First-party siblings live next
-to it (`README.zh-CN.md`, `README.ja.md`, …). Schema, ADRs, and the rest of
-`docs/` stay English. Rules, filename convention, and the do-not-translate
-list: [docs/TRANSLATING.md](docs/TRANSLATING.md). A three-sentence stub is
-not a translation.
+English [`README.md`](README.md) is the only README. Do not add locale
+siblings. [docs/TRANSLATING.md](docs/TRANSLATING.md).
 
 ## Commit messages
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod cmd;
+mod composition;
 mod paths;
 mod preview;
 
@@ -133,7 +134,7 @@ enum Command {
         #[arg(long)]
         scion: String,
     },
-    /// Decode and composite a local preview outside the delivery cache.
+    /// Compile a dest through the same graph as ship / swap.
     Preview {
         #[arg(long)]
         scion: Option<String>,
@@ -149,9 +150,9 @@ enum Command {
         #[command(subcommand)]
         command: StoreCommand,
     },
-    /// First dest from takes/. Creates score/scion if missing.
+    /// First dest from composition.json ranges (or named takes).
     Ship {
-        /// Take directory (named hook.mov, body.mov, …).
+        /// Take directory (`composition.json` slots, or named roles).
         #[arg(long, default_value = "takes")]
         from: PathBuf,
         /// Write the dest file here.
@@ -165,7 +166,7 @@ enum Command {
         #[arg(long, default_value = "x264")]
         encoder: String,
     },
-    /// Swap one slot onto a new take. Fails if a clean sibling recodes.
+    /// Swap one slot or graph node. Fails if a clean sibling recodes.
     Swap {
         slot: String,
         /// New take path. Mutually exclusive with --from.
@@ -179,6 +180,18 @@ enum Command {
         out_dir: Option<PathBuf>,
         #[arg(long)]
         scion: Option<String>,
+        /// Source in-point on the library clip (seconds).
+        #[arg(long = "in")]
+        in_s: Option<f64>,
+        /// Source out-point on the library clip (seconds). `--out` is the dest path.
+        #[arg(long = "src-out")]
+        out_s: Option<f64>,
+        /// Overlay x, without a new take. Clears motion on that axis.
+        #[arg(long)]
+        x: Option<String>,
+        /// Overlay y, without a new take. Clears motion on that axis.
+        #[arg(long)]
+        y: Option<String>,
     },
     /// Resolve a signal, iterate an empty child, name the next swap.
     Address {
@@ -294,7 +307,9 @@ fn run() -> Result<()> {
             speed,
             scion,
             layer,
-        } => cmd::bind(dir, slot, material, in_s, out_s, speed, scion, layer),
+        } => cmd::bind(
+            dir, slot, material, in_s, out_s, speed, scion, layer, None, None,
+        ),
         Command::Scion { command } => match command {
             ScionCommand::Create {
                 id,
@@ -357,7 +372,13 @@ fn run() -> Result<()> {
             out,
             out_dir,
             scion,
-        } => cmd::swap(dir, slot, file, from, out, out_dir, scion),
+            in_s,
+            out_s,
+            x,
+            y,
+        } => cmd::swap(
+            dir, slot, file, from, out, out_dir, scion, in_s, out_s, x, y,
+        ),
         Command::Address {
             kind,
             t,

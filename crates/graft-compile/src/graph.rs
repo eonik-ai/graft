@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use graft_cas::{ActionKey, BlobId};
-use graft_score::{AudioBinding, Binding, Dest, Role, Scion, Score, Slot, TimeMap};
+use graft_score::{
+    op_writes_picture, AudioBinding, Binding, Dest, GraphMode, GraphNode, Role, Scion, Score, Slot,
+    TimeMap,
+};
 
 use crate::flatten::flatten;
 use crate::grain::Grain;
 use crate::keys::{
-    audio_encode_key, audio_mix_key, captions_key, kerf_key, overlay_mix_key, scion_hash,
-    slot_encode_key,
+    audio_encode_key, audio_mix_key, captions_key, deliver_key, kerf_key, node_key,
+    overlay_mix_key, slot_encode_key, spine_picture_key,
 };
 
 #[derive(Clone, Debug)]
@@ -64,10 +67,17 @@ pub struct CaptionsAction {
 pub struct OverlayMixAction {
     pub key: ActionKey,
     pub brand: SlotEncodeAction,
+    pub rest: Vec<SlotEncodeAction>,
 }
 
 #[derive(Clone, Debug)]
 pub struct AudioMixAction {
+    pub key: ActionKey,
+}
+
+#[derive(Clone, Debug)]
+pub struct NodeAction {
+    pub node: GraphNode,
     pub key: ActionKey,
 }
 
@@ -82,10 +92,15 @@ pub struct ActionGraph {
     pub overlay_audio: Vec<AudioEncodeAction>,
     pub captions: Vec<CaptionsAction>,
     pub kerfs: Vec<KerfAction>,
+    pub nodes: Vec<NodeAction>,
+    pub spine_key: ActionKey,
     pub concat: ConcatAction,
     pub audio_mix: Option<AudioMixAction>,
     pub overlay_mix: Option<OverlayMixAction>,
+    pub replace: bool,
     pub time_map: TimeMap,
+    pub picture_key: ActionKey,
+    pub audio_key: Option<ActionKey>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -133,7 +148,7 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
         let left = &pair[0];
         let right = &pair[1];
         let join = score.join_between(&left.slot.id, &right.slot.id);
-        if join.transition != "cut" && join.transition != "fade" {
+        if join.transition != "cut" && graft_score::xfade_filter_name(&join.transition).is_err() {
             return Err(LowerError::Invalid(format!(
                 r#"{{"error":"unknown_transition","transition":"{}"}}"#,
                 join.transition
@@ -174,7 +189,7 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
 
     let mut overlay_audio = Vec::new();
     let mut captions = Vec::new();
-    let mut brand: Option<SlotEncodeAction> = None;
+    let mut picture_overlays = Vec::new();
     for slot in &score.slots {
         if slot.role.is_spine() {
             continue;
@@ -185,10 +200,11 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
         let material =
             BlobId::parse(&binding.material).map_err(|e| LowerError::Invalid(e.to_string()))?;
         match slot.role {
-            Role::Vo | Role::Bed => {
+            Role::Vo | Role::Bed | Role::Sfx => {
                 let audio_binding = binding.audio.clone().unwrap_or(AudioBinding {
                     material: binding.material.clone(),
                     source: binding.source,
+                    place: None,
                 });
                 let audio_material = BlobId::parse(&audio_binding.material)
                     .map_err(|e| LowerError::Invalid(e.to_string()))?;
@@ -208,8 +224,8 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
                     material,
                 });
             }
-            Role::Brand => {
-                brand = Some(SlotEncodeAction {
+            Role::Brand | Role::Overlay => {
+                picture_overlays.push(SlotEncodeAction {
                     slot: (*slot).clone(),
                     binding: binding.clone(),
                     key: slot_encode_key(slot, binding, &scion.dest),
@@ -220,32 +236,134 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
         }
     }
 
-    let mut mix_audio_keys: Vec<ActionKey> =
-        audio.iter().map(|action| action.key.clone()).collect();
-    mix_audio_keys.extend(overlay_audio.iter().map(|action| action.key.clone()));
-    let audio_mix = if overlay_audio.is_empty() {
+    let mut mix_audio_parts: Vec<(ActionKey, Option<(i64, u64)>)> = audio
+        .iter()
+        .map(|action| (action.key.clone(), audio_place(&action.binding)))
+        .collect();
+    mix_audio_parts.extend(
+        overlay_audio
+            .iter()
+            .map(|action| (action.key.clone(), audio_place(&action.binding))),
+    );
+    let audio_mix = if overlay_audio.is_empty() && !audio.iter().any(audio_is_split) {
         None
     } else {
         Some(AudioMixAction {
-            key: audio_mix_key(&mix_audio_keys, &scion.dest),
+            key: audio_mix_key(&mix_audio_parts, &scion.dest),
         })
+    };
+    let deliver_audio_key = if mix_audio_parts.is_empty() {
+        None
+    } else {
+        Some(audio_mix_key(&mix_audio_parts, &scion.dest))
     };
 
     let slot_keys: Vec<ActionKey> = slots.iter().map(|s| s.key.clone()).collect();
-    let audio_keys: Vec<ActionKey> = mix_audio_keys.clone();
-    let kerf_keys: Vec<ActionKey> = kerfs.iter().map(|k| k.key.clone()).collect();
-    let caption_keys: Vec<String> = captions.iter().map(|c| c.key.hex().to_string()).collect();
-    let extra = serde_json::json!({
-        "captions": caption_keys,
-        "overlay_audio": overlay_audio.iter().map(|a| a.key.hex().to_string()).collect::<Vec<_>>(),
-        "audio_mix": audio_mix.as_ref().map(|m| m.key.hex().to_string()),
-        "brand": brand.as_ref().map(|b| b.key.hex().to_string()),
+    let joins: Vec<(String, u64)> = kerfs
+        .iter()
+        .map(|k| (k.transition.clone(), k.duration_frames))
+        .collect();
+    let spine_key = spine_picture_key(&slot_keys, &joins, &scion.dest);
+    let overlay_mix = picture_overlays.split_first().map(|(brand, rest)| {
+        let pads: Vec<serde_json::Value> = std::iter::once(brand)
+            .chain(rest.iter())
+            .map(|pad| {
+                serde_json::json!({
+                    "key": pad.key.hex(),
+                    "x": pad.binding.overlay_x(),
+                    "y": pad.binding.overlay_y(),
+                    "opacity": pad.binding.overlay_opacity_expr(),
+                })
+            })
+            .collect();
+        OverlayMixAction {
+            key: overlay_mix_key(&spine_key, &pads, &scion.dest),
+            brand: brand.clone(),
+            rest: rest.to_vec(),
+        }
     });
-    let concat_key = scion_hash(scion, &slot_keys, &audio_keys, &kerf_keys, &extra);
-    let overlay_mix = brand.map(|brand| OverlayMixAction {
-        key: overlay_mix_key(&concat_key, &brand.key, &scion.dest),
-        brand,
-    });
+
+    let replace = scion
+        .graph
+        .as_ref()
+        .map(|g| g.mode == GraphMode::Replace)
+        .unwrap_or(false);
+    let mut pad_keys: std::collections::BTreeMap<String, ActionKey> =
+        std::collections::BTreeMap::new();
+    if !replace {
+        for slot in &slots {
+            pad_keys.insert(slot.slot.id.clone(), slot.key.clone());
+        }
+        let mut picture_key = slots
+            .first()
+            .map(|s| s.key.clone())
+            .unwrap_or(spine_key.clone());
+        if !kerfs.is_empty() {
+            picture_key = spine_key.clone();
+        }
+        if let Some(overlay) = &overlay_mix {
+            pad_keys.insert(overlay.brand.slot.id.clone(), overlay.brand.key.clone());
+            for pad in &overlay.rest {
+                pad_keys.insert(pad.slot.id.clone(), pad.key.clone());
+            }
+            picture_key = overlay.key.clone();
+        }
+        for ov in &overlay_audio {
+            pad_keys.insert(ov.slot.id.clone(), ov.key.clone());
+        }
+        pad_keys.insert("#picture".into(), picture_key);
+        if let Some(key) = &deliver_audio_key {
+            pad_keys.insert("#audio".into(), key.clone());
+        }
+    }
+
+    let mut nodes = Vec::new();
+    if let Some(g) = &scion.graph {
+        for node in graft_score::expand_groups(&g.nodes) {
+            crate::filters::ensure_op(&node.op).map_err(|e| LowerError::Invalid(e.to_string()))?;
+            let inputs: Vec<ActionKey> = node
+                .inputs
+                .iter()
+                .filter_map(|name| pad_keys.get(name).cloned())
+                .collect();
+            let mut extra = serde_json::json!({
+                "material": node.material,
+                "source": node.source,
+                "place": node.place,
+                "enable": node.enable,
+                "role": node.role,
+                "params": node.params,
+            });
+            if node.keys.is_some() {
+                extra["keys"] = serde_json::to_value(&node.keys).unwrap_or(serde_json::Value::Null);
+            }
+            let key = node_key(&node.op, &node.id, &inputs, &extra, &scion.dest);
+            pad_keys.insert(node.id.clone(), key.clone());
+            if crate::filters::routes_audio(&node.op)
+                .map_err(|e| LowerError::Invalid(e.to_string()))?
+            {
+                pad_keys.insert("#audio".into(), key.clone());
+            } else if op_writes_picture(&node.op) {
+                pad_keys.insert("#picture".into(), key.clone());
+            }
+            nodes.push(NodeAction { node, key });
+        }
+    }
+
+    let picture_key = pad_keys
+        .get("#picture")
+        .cloned()
+        .or_else(|| slots.first().map(|s| s.key.clone()))
+        .unwrap_or(spine_key.clone());
+    let audio_key = pad_keys.get("#audio").cloned();
+    let caption_keys: Vec<ActionKey> = captions.iter().map(|c| c.key.clone()).collect();
+    let concat_key = deliver_key(
+        &picture_key,
+        audio_key.as_ref(),
+        &caption_keys,
+        &scion.dest,
+        &score.markers,
+    );
     let time_map = TimeMap::from_bindings(
         score,
         &scion.id,
@@ -264,14 +382,32 @@ pub fn lower(score: &Score, scion: &Scion) -> Result<ActionGraph, LowerError> {
         overlay_audio,
         captions,
         kerfs,
+        nodes,
+        spine_key,
         concat: ConcatAction {
             key: concat_key,
             parts,
         },
         audio_mix,
         overlay_mix,
+        replace,
         time_map,
+        picture_key,
+        audio_key,
     })
+}
+
+fn audio_place(binding: &AudioBinding) -> Option<(i64, u64)> {
+    binding.place.map(|place| (place.start, place.duration))
+}
+
+pub(crate) fn audio_is_split(action: &AudioEncodeAction) -> bool {
+    if action.binding.place.is_some() {
+        return true;
+    }
+    let pic = action.slot.range.duration as f64 / action.binding.source.rate.as_f64().max(1.0);
+    let aud = action.binding.source.end_seconds() - action.binding.source.start_seconds();
+    (pic - aud).abs() > 0.5 / action.binding.source.rate.as_f64().max(1.0)
 }
 
 #[cfg(test)]

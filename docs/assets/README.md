@@ -1,28 +1,22 @@
 # README assets
 
-`landing.cast` is the source recording for the CLI demo. `landing.gif` is
-the GitHub-compatible rendering.
+[`example-hook.png`](example-hook.png) and
+[`example-body.png`](example-body.png) are frames from dest v1 | dest v2
+after a real `graft ship` + `graft swap`. [`example.gif`](example.gif) is
+the same pair, first four seconds. Essence (the takes and dest mp4s) is
+not in git.
 
-The recording runs the actual release binary against generated H.264 clips:
-
-1. `graft ship --out ad.mp4` from `takes/hook.mov`, `body.mov`, `cta.mov`;
-2. `graft swap hook ./takes/hooks/v2.mov --out ad-v2.mp4`;
-3. the reuse ledger reports `hook` dirty and `body` / `cta` clean.
-
-Regenerate both files from the repository root:
+Hook / body / CTA were cut from a local 9:16 product clip. The swapped
+hook is a second take of that product. Color tags on every take must
+match (`yuv420p` / `bt709` / `tv`) or concat refuses the join.
 
 ```sh
-brew install ffmpeg asciinema agg
-make readme-demo
+HOOK=/path/to/clip.mov \
+BODY=/path/to/clip.mov \
+CTA=/path/to/clip.mov \
+HOOK2=/path/to/other-hook.mp4 \
+make readme-example
 ```
 
-A local playable walk (no recording tools) is `make demo`: ship, swap a
-hook, address `hook_rate`, swap again. Three dests must exist.
-
-`make walkthrough` writes labeled 9:16 plates and
-[`walkthrough.gif`](walkthrough.gif): dest v1 beside dest v2 after a hook
-swap. The mp4 is gitignored.
-
-The recording scripts are [`../../scripts/landing-setup.sh`](../../scripts/landing-setup.sh),
-[`../../scripts/landing-session.sh`](../../scripts/landing-session.sh), and
-[`../../scripts/record-landing.sh`](../../scripts/record-landing.sh).
+`make walkthrough` still writes labeled color plates for a no-footage
+machine. Do not put those plates on the README.

@@ -18,6 +18,14 @@ pub fn scion(dir: &Path, id: &str) -> PathBuf {
     scions(dir).join(format!("{id}.json"))
 }
 
+pub fn nest_score(dir: &Path, id: &str) -> PathBuf {
+    dir.join("nests").join(id).join(SCORE_FILE)
+}
+
+pub fn nest_dir(dir: &Path, id: &str) -> PathBuf {
+    dir.join("nests").join(id)
+}
+
 pub fn feedback_dir(dir: &Path) -> PathBuf {
     dir.join(FEEDBACK_DIR)
 }

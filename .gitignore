@@ -35,6 +35,7 @@ __pycache__/
 
 # local CAS — essence, never git
 .graft/
+.tmp-example/
 
 # editors
 .idea/

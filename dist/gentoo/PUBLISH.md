@@ -1,15 +1,13 @@
 # Gentoo GURU
 
-GitHub PRs on https://github.com/gentoo/guru need GURU contributor
-access. Apply: https://wiki.gentoo.org/wiki/Project:GURU
+GitHub PRs on https://github.com/gentoo/guru are being phased out.
+New contributors send a patch first.
 
-The ebuild is already on
-https://github.com/techievena/guru/tree/graft-0.2.2
+Send [`MAIL.txt`](MAIL.txt) from Gmail to `gentoo-guru@lists.gentoo.org`.
+Index: [`../MAILS.md`](../MAILS.md).
 
-After access is granted:
+If the list holds it, subscribe first:
+https://lists.gentoo.org/mailman/listinfo/gentoo-guru
 
-```sh
-gh pr create --repo gentoo/guru --head techievena:graft-0.2.2 \
-  --title "media-video/graft: new package" \
-  --body "Local-first composition workspace. Incremental compiler for video. Runtime ffmpeg (shell-out)."
-```
+Codeberg (preferred later): https://codeberg.org/gentoo/guru
+GitHub branch (same files): https://github.com/techievena/guru/tree/graft-0.2.2

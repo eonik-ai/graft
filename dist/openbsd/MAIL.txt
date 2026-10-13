@@ -1,0 +1,64 @@
+TO: ports@openbsd.org
+SUBJECT: NEW: multimedia/graft 0.2.2
+
+-----BODY-----
+Please consider importing this new port.
+
+graft is a local-first composition workspace. Incremental compiler
+for video. Git owns recipe history; graft owns scions, layers, and
+compile. Runtime ffmpeg via shell-out (graphics/ffmpeg). Build with
+lang/rust.
+
+  https://github.com/eonik-ai/graft
+  https://github.com/eonik-ai/graft/releases/tag/v0.2.2
+
+I do not have a ports CVS login. Happy to adjust the Makefile if a
+committer wants to import it.
+
+crates.io crate name graft is a different program (orbitinghail).
+This source is github.com/eonik-ai/graft.
+
+Comment:	Change the hook. Keep the body.
+WWW:		https://github.com/eonik-ai/graft
+
+diff follows.
+
+--- /dev/null
++++ multimedia/graft/Makefile
+@@ -0,0 +1,30 @@
++COMMENT =	Change the hook. Keep the body.
++
++DISTNAME =	graft-0.2.2
++
++CATEGORIES =	multimedia
++
++HOMEPAGE =	https://github.com/eonik-ai/graft
++
++MAINTAINER =	Abinash Senapati <abinashsena@gmail.com>
++
++# Apache 2.0
++PERMIT_PACKAGE =	Yes
++
++WANTLIB +=	c pthread
++
++BUILD_DEPENDS =	lang/rust
++RUN_DEPENDS =	graphics/ffmpeg
++
++SITES =		https://github.com/eonik-ai/graft/archive/refs/tags/
++DISTFILES =	v0.2.2.tar.gz
++
++WRKDIST =	${WRKDIR}/graft-0.2.2
++
++do-build:
++	cd ${WRKSRC} && cargo build --release --locked --bin graft
++
++do-install:
++	${INSTALL_PROGRAM} ${WRKSRC}/target/release/graft ${PREFIX}/bin/
++
++.include <bsd.port.mk>
+--- /dev/null
++++ multimedia/graft/distinfo
+@@ -0,0 +1,2 @@
++SHA256 (v0.2.2.tar.gz) = qnNrSb2CXqq80NcTs8DlAveUdmwcZc8GHRiWPappvzs=
++SIZE (v0.2.2.tar.gz) = 601165
+-----END-----

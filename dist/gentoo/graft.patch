@@ -1,0 +1,52 @@
+diff -ruN a/media-video/graft/Manifest b/media-video/graft/Manifest
+--- a/media-video/graft/Manifest	1970-01-01 05:30:00
++++ b/media-video/graft/Manifest	2026-09-17 17:46:36
+@@ -0,0 +1 @@
++DIST graft-0.2.2.tar.gz 601165 BLAKE2B 44e23be15e1f652532409f6c177d3cbc8744958d80bf087c764b390f6828707c97df645734ab5b226810d0466b796a44e1695dd345034be875c40050013feb66 SHA512 a97d5cdadb8b96e1129678b32860de1cbe673f357c36407c55ec48e13b1f07b7fdf57a7c5720c9d8375b92700816bad305e38761093dfe65acbc1fa014d72254
+diff -ruN a/media-video/graft/graft-0.2.2.ebuild b/media-video/graft/graft-0.2.2.ebuild
+--- a/media-video/graft/graft-0.2.2.ebuild	1970-01-01 05:30:00
++++ b/media-video/graft/graft-0.2.2.ebuild	2026-09-17 17:46:36
+@@ -0,0 +1,28 @@
++# Copyright 2026 eonik
++# Distributed under the terms of the GNU General Public License v2
++
++EAPI=8
++
++CRATES=""
++inherit cargo
++
++DESCRIPTION="Change the hook. Keep the body."
++HOMEPAGE="https://github.com/eonik-ai/graft"
++SRC_URI="https://github.com/eonik-ai/graft/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
++
++LICENSE="Apache-2.0"
++SLOT="0"
++KEYWORDS="~amd64 ~arm64"
++
++RDEPEND="media-video/ffmpeg"
++DEPEND="${RDEPEND}"
++BDEPEND="virtual/rust"
++
++src_configure() {
++	cargo_src_configure --bin graft
++}
++
++src_install() {
++	cargo_src_install --path crates/graft
++	dodoc README.md
++}
+diff -ruN a/media-video/graft/metadata.xml b/media-video/graft/metadata.xml
+--- a/media-video/graft/metadata.xml	1970-01-01 05:30:00
++++ b/media-video/graft/metadata.xml	2026-09-17 17:46:36
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
++<pkgmetadata>
++	<maintainer type="person">
++		<email>abinashsena@gmail.com</email>
++		<name>Abinash Senapati</name>
++	</maintainer>
++	<upstream>
++		<remote-id type="github">eonik-ai/graft</remote-id>
++	</upstream>
++</pkgmetadata>

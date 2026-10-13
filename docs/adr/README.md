@@ -10,7 +10,8 @@ three layers · [0003](0003-adapters-are-guests.md) adapters ·
 [0006](0006-action-graph-and-action-cache.md) action cache ·
 [0007](0007-compiler-is-a-workspace-subsystem.md) workspace ·
 [0008](0008-overlay-actions-and-named-fades.md) overlays ·
-[0009](0009-porcelain-closes-the-founding-loop.md) porcelain.
+[0009](0009-porcelain-closes-the-founding-loop.md) porcelain ·
+[0010](0010-composition-is-a-filtergraph.md) composition graph.
 
 Template:
 

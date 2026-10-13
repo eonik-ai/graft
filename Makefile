@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: test lint fmt fmt-check readme-demo demo walkthrough example-encode clean
+.PHONY: test lint fmt fmt-check readme-demo readme-example demo walkthrough example-encode clean
 
 PYTHON ?= python3
 CARGO ?= cargo
@@ -24,6 +24,10 @@ fmt-check: lint
 readme-demo:
 	$(CARGO) build --release --bin graft
 	sh scripts/record-landing.sh
+
+readme-example:
+	$(CARGO) build --release --bin graft
+	sh scripts/readme-example.sh
 
 demo:
 	$(CARGO) build --release --bin graft

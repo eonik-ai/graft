@@ -27,7 +27,7 @@ compiler-only description (ADR 0007).
 
 ## What graft adds
 
-Git remains the history layer. graft adds the video-aware workspace semantics
+Git remains the history layer. graft adds the video-aware compiler semantics
 that a general text VCS should not own:
 
 - named concepts and multiple derived scions;
@@ -37,12 +37,12 @@ that a general text VCS should not own:
 - platform-signal resolution to slots and kerfs; and
 - an action graph that reuses clean derived resources.
 
-Porcelain (`ship` / `swap` / `address`) is how a person runs that loop
-without eight plumbing verbs (ADR 0009).
+The reference CLI (`ship` / `swap` / `address`) runs that loop without
+eight plumbing verbs (ADR 0009). A host should call `graft_compile::compile`.
 
-The current implementation provides those workspace semantics plus the
-incremental compiler and that porcelain. NLE guests remain lossy; only the
-scoped OTIO subset is implemented.
+The current implementation provides those semantics plus the incremental
+compiler and that CLI. NLE guests remain lossy; only the scoped OTIO
+subset is implemented. No app host compiles through the crates yet.
 
 ## Closest cousins
 

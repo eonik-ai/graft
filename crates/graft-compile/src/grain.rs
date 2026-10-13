@@ -63,6 +63,7 @@ mod tests {
             rate: FrameRate::new(30, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
+            working: None,
             encoder: Encoder::default_x264(),
         };
         assert_eq!(Grain::from_dest(&dest), Grain::Gop { keyint: 30 });

@@ -13,8 +13,8 @@ license: Apache-2.0
 repository-code: "https://github.com/eonik-ai/graft"
 url: "https://github.com/eonik-ai/graft"
 abstract: >-
-  Incremental compiler for video composition. Change a hook,
-  bitstream-copy the body. JSON score, CAS essence, ffmpeg/x264.
+  Compiler and recipe IR for versioned ads. Hosts embed the crates;
+  unchanged slots keep their encodes. JSON score, CAS essence, ffmpeg/x264.
 version: "0.2.1"
 keywords:
   - video

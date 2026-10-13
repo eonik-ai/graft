@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use graft_score::{FrameRange, Role, Score, TimeMap};
+use graft_score::{CompositionGraph, FrameRange, FrameRate, Role, Score, TimeMap};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -20,6 +20,8 @@ pub struct DirtySet {
     pub clean: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mixes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<String>,
     pub warnings: Vec<String>,
 }
 
@@ -117,8 +119,8 @@ pub fn dirty_from_signal_range(
     for id in &slots {
         if let Some(slot) = score.slot(id) {
             let mix = match slot.role {
-                Role::Vo | Role::Bed => Some("audio_mix"),
-                Role::Brand => Some("overlay_mix"),
+                Role::Vo | Role::Bed | Role::Sfx => Some("audio_mix"),
+                Role::Brand | Role::Overlay => Some("overlay_mix"),
                 _ => None,
             };
             if let Some(name) = mix {
@@ -139,8 +141,67 @@ pub fn dirty_from_signal_range(
         kerfs,
         clean,
         mixes,
+        nodes: Vec::new(),
         warnings,
     }
+}
+
+/// Dest-wide graph nodes, or nodes whose `enable=` overlaps `range`.
+/// Group children inherit the group's enable when they have none.
+pub fn covering_graph_nodes(
+    graph: &CompositionGraph,
+    range: FrameRange,
+    rate: FrameRate,
+) -> Vec<String> {
+    fn walk(
+        nodes: &[graft_score::GraphNode],
+        inherited: Option<&str>,
+        range: FrameRange,
+        rate: FrameRate,
+        out: &mut Vec<String>,
+    ) {
+        for node in nodes {
+            let enable = node.enable.as_deref().or(inherited);
+            let covers = node_covers_range(enable, range, rate);
+            if node.op == "group" {
+                if covers {
+                    out.push(node.id.clone());
+                }
+                walk(&node.nodes, enable, range, rate, out);
+            } else if covers {
+                out.push(node.id.clone());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&graph.nodes, None, range, rate, &mut out);
+    out
+}
+
+fn node_covers_range(enable: Option<&str>, range: FrameRange, rate: FrameRate) -> bool {
+    let Some(enable) = enable else {
+        return true;
+    };
+    let trimmed = enable.trim();
+    let Some(inner) = trimmed
+        .strip_prefix("between(t,")
+        .and_then(|s| s.strip_suffix(')'))
+    else {
+        return true;
+    };
+    let mut parts = inner.split(',');
+    let (Some(a), Some(b)) = (parts.next(), parts.next()) else {
+        return true;
+    };
+    let Ok(t0) = a.trim().parse::<f64>() else {
+        return true;
+    };
+    let Ok(t1) = b.trim().parse::<f64>() else {
+        return true;
+    };
+    FrameRange::from_seconds(rate, t0, t1)
+        .map(|span| span.overlap_frames(range) > 0)
+        .unwrap_or(true)
 }
 
 #[cfg(test)]
@@ -522,5 +583,37 @@ mod tests {
         assert!(!at_209.slots.contains(&"cta".to_string()));
         assert!(at_210.slots.contains(&"cta".to_string()));
         assert!(!at_210.slots.contains(&"body".to_string()));
+    }
+
+    #[test]
+    fn covering_nodes_dest_wide_and_enable_window() {
+        use graft_score::{CompositionGraph, GraphMode, GraphNode};
+        let rate = FrameRate::new(30, 1);
+        let node = |id: &str, enable: Option<&str>| GraphNode {
+            id: id.into(),
+            op: "eq".into(),
+            inputs: vec!["#picture".into()],
+            material: None,
+            source: None,
+            place: None,
+            enable: enable.map(str::to_string),
+            role: None,
+            params: None,
+
+            keys: None,
+            nodes: Vec::new(),
+        };
+        let graph = CompositionGraph {
+            mode: GraphMode::Append,
+            nodes: vec![node("look", None), node("eq", Some("between(t,3,4)"))],
+        };
+        assert_eq!(
+            covering_graph_nodes(&graph, FrameRange::new(0, 30), rate),
+            vec!["look".to_string()]
+        );
+        assert_eq!(
+            covering_graph_nodes(&graph, FrameRange::new(90, 30), rate),
+            vec!["look".to_string(), "eq".to_string()]
+        );
     }
 }

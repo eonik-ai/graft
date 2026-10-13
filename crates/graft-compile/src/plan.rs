@@ -48,6 +48,8 @@ pub struct CompilePlan {
     pub slots: Vec<SlotPlan>,
     pub audio: Vec<SlotPlan>,
     pub kerfs: Vec<KerfPlan>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<SlotPlan>,
     pub concat: Vec<String>,
     pub concat_cache: &'static str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -112,6 +114,16 @@ pub fn plan_from_schedule(graph: &ActionGraph, schedule: &Schedule, encode: bool
         slots,
         audio,
         kerfs,
+        nodes: schedule
+            .nodes
+            .iter()
+            .map(|n| SlotPlan {
+                id: n.action.node.id.clone(),
+                cache: n.cache.as_str(),
+                slot_encode: n.action.key.hex().to_string(),
+                blob: n.cache.blob().map(|b| b.to_string()),
+            })
+            .collect(),
         concat,
         concat_cache: schedule.concat.cache.as_str(),
         overlay_audio: schedule

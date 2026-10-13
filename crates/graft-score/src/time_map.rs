@@ -86,7 +86,7 @@ impl TimeMap {
                     .into_iter()
                     .filter_map(|slot| {
                         bindings.get(&slot.id).map(|binding| TimeMapEntry {
-                            dest: slot.range,
+                            dest: score.compiled_range(slot.range),
                             source: binding.source,
                             slot: slot.id.clone(),
                         })

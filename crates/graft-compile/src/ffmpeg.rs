@@ -298,6 +298,7 @@ fn first_packet_is_keyframe(path: &Path) -> Result<bool, EncodeError> {
     Ok(key && pict == "I")
 }
 
+#[allow(dead_code)]
 fn atempo_filter(speed: f64) -> Result<String, EncodeError> {
     if speed <= 0.0 || !speed.is_finite() {
         return Err(EncodeError::Invalid(
@@ -497,6 +498,10 @@ impl EncodeBackend for FfmpegX264 {
         true
     }
 
+    fn working_graph(&self) -> bool {
+        true
+    }
+
     fn grain(&self, dest: &Dest) -> Grain {
         Grain::Gop {
             keyint: dest.encoder.keyint,
@@ -504,68 +509,20 @@ impl EncodeBackend for FfmpegX264 {
     }
 
     fn encode_slot(&self, req: &SlotEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
-        let dir = tempfile::tempdir().map_err(|e| EncodeError::Invalid(e.to_string()))?;
-        let input = dir.path().join("material.bin");
-        let output = dir.path().join("slot.mp4");
-        fs::write(&input, req.material).map_err(|e| EncodeError::Invalid(e.to_string()))?;
-        let mut args: Vec<String> = vec![
-            "-hide_banner".into(),
-            "-loglevel".into(),
-            "error".into(),
-            "-y".into(),
-            "-ss".into(),
-            format!("{:.3}", req.action.binding.in_s()),
-            "-to".into(),
-            format!("{:.3}", req.action.binding.out_s()),
-            "-i".into(),
-            input.to_string_lossy().into_owned(),
-        ];
-        args.extend(x264_args(
-            &req.dest.encoder,
-            req.dest,
-            req.action.binding.speed(),
-        )?);
-        args.push(output.to_string_lossy().into_owned());
-        let str_args: Vec<&str> = args.iter().map(String::as_str).collect();
-        run_ok(&self.ffmpeg, &str_args).map_err(EncodeError::Invalid)?;
-        fs::read(&output).map_err(|e| EncodeError::Invalid(e.to_string()))
+        let dest_s = req
+            .dest
+            .rate
+            .seconds_from_frames(req.slot.range.duration as i64);
+        crate::working::encode_working_binding(req.dest, req.material, &req.action.binding, dest_s)
     }
 
     fn encode_audio(&self, req: &AudioEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
-        let dir = tempfile::tempdir().map_err(|e| EncodeError::Invalid(e.to_string()))?;
-        let input = dir.path().join("material.bin");
-        let output = dir.path().join("audio.m4a");
-        fs::write(&input, req.material).map_err(|e| EncodeError::Invalid(e.to_string()))?;
-        let args = [
-            "-hide_banner".to_string(),
-            "-loglevel".to_string(),
-            "error".to_string(),
-            "-y".to_string(),
-            "-ss".to_string(),
-            format!("{:.6}", req.action.binding.source.start_seconds()),
-            "-to".to_string(),
-            format!("{:.6}", req.action.binding.source.end_seconds()),
-            "-i".to_string(),
-            input.to_string_lossy().into_owned(),
-            "-vn".to_string(),
-            "-c:a".to_string(),
-            "aac".to_string(),
-            "-ar".to_string(),
-            "48000".to_string(),
-            "-ac".to_string(),
-            "2".to_string(),
-            "-b:a".to_string(),
-            "192k".to_string(),
-        ];
-        let mut args = args.to_vec();
-        if (req.action.speed - 1.0).abs() > 1e-9 {
-            args.push("-filter:a".into());
-            args.push(atempo_filter(req.action.speed)?);
-        }
-        args.push(output.to_string_lossy().into_owned());
-        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        run_ok(&self.ffmpeg, &refs).map_err(EncodeError::Invalid)?;
-        fs::read(&output).map_err(|e| EncodeError::Invalid(e.to_string()))
+        crate::working::encode_working_audio(
+            req.material,
+            req.action.binding.source.start_seconds(),
+            req.action.binding.source.end_seconds(),
+            req.action.speed,
+        )
     }
 
     fn encode_kerf(&self, req: &KerfEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
@@ -1204,8 +1161,9 @@ mod tests {
     use crate::pipeline::compile;
     use graft_cas::{Kind, Memory, Store};
     use graft_score::{
-        Binding, BindingLayer, Clock, Dest, Encoder, FrameRange, FrameRate, Join, Layer,
-        RateControl, RateControlMode, Role, Scion, Score, Slot, TimedRange, Window, GRAFT_SCHEMA,
+        Binding, BindingLayer, Clock, CompositionGraph, Dest, Encoder, FrameRange, FrameRate,
+        GraphMode, GraphNode, Join, Layer, RateControl, RateControlMode, Role, Scion, Score, Slot,
+        TimedRange, Window, GRAFT_SCHEMA,
     };
     use std::collections::BTreeMap;
 
@@ -1303,6 +1261,7 @@ mod tests {
             dest_default: Some("9x16".into()),
             spill_threshold_frames: 4,
             joins: Vec::new(),
+            markers: Vec::new(),
         }
     }
 
@@ -1316,6 +1275,7 @@ mod tests {
             rate: FrameRate::new(10, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
+            working: None,
             encoder: enc,
         }
     }
@@ -1326,6 +1286,12 @@ mod tests {
             source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: None,
             audio: None,
+            nested: None,
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
         }
     }
 
@@ -1363,6 +1329,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -1414,7 +1381,7 @@ mod tests {
                 &store.get_action(&kerf.key).unwrap().unwrap().blob,
             )
             .unwrap();
-        assert!(kerf_bytes.is_empty());
+        assert!(!kerf_bytes.is_empty());
     }
 
     fn bind_speed(material: &str, in_s: f64, out_s: f64, speed: f64) -> Binding {
@@ -1423,6 +1390,12 @@ mod tests {
             source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: Some(serde_json::json!({ "speed": speed })),
             audio: None,
+            nested: None,
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
         }
     }
 
@@ -1459,6 +1432,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -1650,6 +1624,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -1755,6 +1730,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest,
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -1768,9 +1744,10 @@ mod tests {
             bitrate: Some("800k".into()),
         });
         dest.encoder.level = Some("4.0".into());
-        // Encoder fingerprint is on dest, so every slot_encode misses.
+        // Delivery encoder is not part of working-source keys (ADR 0010).
         let second = compile(&score, &scion(dest), &store, &ff, &ff).unwrap();
-        assert!(second.plan.slots.iter().all(|s| s.cache == "miss"));
+        assert!(second.plan.slots.iter().all(|s| s.cache == "hit"));
+        assert_eq!(second.plan.concat_cache, "miss");
         assert!(first.encoded && second.encoded);
     }
 
@@ -1849,6 +1826,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -1965,5 +1943,427 @@ mod tests {
                 .cache,
             "miss"
         );
+    }
+
+    fn identity_cube() -> Vec<u8> {
+        b"LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n".to_vec()
+    }
+
+    #[test]
+    fn mixed_geometry_and_untagged_sources_normalize() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip mixed_geometry_and_untagged_sources_normalize — install ffmpeg");
+            return;
+        };
+        let score = score();
+        let dest = dest();
+        let store = Memory::new();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 96))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 48))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let mut bindings = BTreeMap::new();
+        bindings.insert("hook".into(), bind(hook.as_str(), 0.0, 1.0));
+        bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+        bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+        let scion = Scion {
+            graft: GRAFT_SCHEMA.into(),
+            id: "9x16".into(),
+            concept: score.concept.clone(),
+            parent: None,
+            change_request: None,
+            dest,
+            graph: None,
+            layers: vec![BindingLayer {
+                name: Layer::Base,
+                bindings,
+            }],
+        };
+        let out = compile(&score, &scion, &store, &ff, &ff).unwrap();
+        assert!(out.encoded);
+        let dest_id = out.concat.unwrap();
+        let mp4 = store.get_blob(Kind::Concat, &dest_id).unwrap();
+        let probed = probe_media(&mp4).unwrap();
+        assert_eq!(probed.video_codec, "h264");
+        assert_eq!(probed.pix_fmt, "yuv420p");
+        assert_eq!(probed.width, 64);
+        assert_eq!(probed.height, 64);
+    }
+
+    #[test]
+    fn lut3d_after_join_reuses_body_working_source() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip lut3d_after_join_reuses_body_working_source — install ffmpeg");
+            return;
+        };
+        let score = score();
+        let dest = dest();
+        let store = Memory::new();
+        let cube = store.put_blob(Kind::Material, &identity_cube()).unwrap();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 64))
+            .unwrap();
+        let hook2 = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "blue", 1.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let graph = Some(graft_score::CompositionGraph {
+            mode: graft_score::GraphMode::Append,
+            nodes: vec![graft_score::GraphNode {
+                id: "look".into(),
+                op: "lut3d".into(),
+                inputs: vec!["#picture".into()],
+                material: Some(cube.as_str().to_string()),
+                source: None,
+                place: None,
+                enable: None,
+                role: None,
+                params: Some(serde_json::json!({"interp": "tetrahedral"})),
+
+                keys: None,
+                nodes: Vec::new(),
+            }],
+        });
+        let scion = |hook_id: &str| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook_id, 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                graph: graph.clone(),
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(hook.as_str()), &store, &ff, &ff).unwrap();
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        let concat_v1 = first.concat.clone().unwrap();
+        let second = compile(&score, &scion(hook2.as_str()), &store, &ff, &ff).unwrap();
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+        assert_ne!(concat_v1, second.concat.unwrap());
+        assert_eq!(second.plan.concat_cache, "miss");
+    }
+
+    #[test]
+    fn sfx_overlay_does_not_recut_body() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip sfx_overlay_does_not_recut_body — install ffmpeg");
+            return;
+        };
+        let mut score = score();
+        score.slots.push(Slot {
+            id: "hit".into(),
+            role: Role::Sfx,
+            range: FrameRange::new(10, 10),
+            optional: false,
+            window: None,
+        });
+        let dest = dest();
+        let store = Memory::new();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 64))
+            .unwrap();
+        let hook2 = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "blue", 1.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let sfx = store.put_blob(Kind::Material, &sine_m4a(&ff, 1.2)).unwrap();
+        let scion = |hook_id: &str| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook_id, 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            bindings.insert("hit".into(), bind(sfx.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest: dest.clone(),
+                graph: None,
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(hook.as_str()), &store, &ff, &ff).unwrap();
+        let body_key = first
+            .graph
+            .slots
+            .iter()
+            .find(|s| s.slot.id == "body")
+            .unwrap()
+            .key
+            .clone();
+        let body_blob = store.get_action(&body_key).unwrap().unwrap().blob;
+        assert!(!first.graph.overlay_audio.is_empty());
+        let second = compile(&score, &scion(hook2.as_str()), &store, &ff, &ff).unwrap();
+        assert_eq!(
+            store.get_action(&body_key).unwrap().unwrap().blob,
+            body_blob
+        );
+        assert_eq!(
+            second
+                .plan
+                .slots
+                .iter()
+                .find(|s| s.id == "body")
+                .unwrap()
+                .cache,
+            "hit"
+        );
+    }
+
+    #[test]
+    fn xfade_shortens_dest_and_records_compiled_time_map() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip xfade_shortens_dest_and_records_compiled_time_map — install ffmpeg");
+            return;
+        };
+        let mut score = score();
+        score.joins = vec![Join {
+            left: "hook".into(),
+            right: "body".into(),
+            transition: "fade".into(),
+            duration_frames: 2,
+        }];
+        let dest = dest();
+        let store = Memory::new();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let mut bindings = BTreeMap::new();
+        bindings.insert("hook".into(), bind(hook.as_str(), 0.0, 1.0));
+        bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+        bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+        let scion = Scion {
+            graft: GRAFT_SCHEMA.into(),
+            id: "9x16".into(),
+            concept: score.concept.clone(),
+            parent: None,
+            change_request: None,
+            dest,
+            graph: None,
+            layers: vec![BindingLayer {
+                name: Layer::Base,
+                bindings,
+            }],
+        };
+        let out = compile(&score, &scion, &store, &ff, &ff).unwrap();
+        assert!(out.encoded);
+        let body_dest = out
+            .time_map
+            .entries
+            .iter()
+            .find(|e| e.slot == "body")
+            .unwrap()
+            .dest;
+        assert_eq!(body_dest, FrameRange::new(8, 20));
+        let mp4 = store
+            .get_blob(Kind::Concat, out.concat.as_ref().unwrap())
+            .unwrap();
+        let probed = probe_media(&mp4).unwrap();
+        assert!((probed.duration_s - 3.8).abs() < 0.2);
+    }
+
+    #[test]
+    fn encoder_change_hits_working_spine() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip encoder_change_hits_working_spine — install ffmpeg");
+            return;
+        };
+        let score = score();
+        let mut dest = dest();
+        let store = Memory::new();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let scion = |dest: Dest| {
+            let mut bindings = BTreeMap::new();
+            bindings.insert("hook".into(), bind(hook.as_str(), 0.0, 1.0));
+            bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+            bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+            Scion {
+                graft: GRAFT_SCHEMA.into(),
+                id: "9x16".into(),
+                concept: score.concept.clone(),
+                parent: None,
+                change_request: None,
+                dest,
+                graph: None,
+                layers: vec![BindingLayer {
+                    name: Layer::Base,
+                    bindings,
+                }],
+            }
+        };
+        let first = compile(&score, &scion(dest.clone()), &store, &ff, &ff).unwrap();
+        assert!(store.get_action(&first.graph.spine_key).unwrap().is_some());
+        dest.encoder.level = Some("4.0".into());
+        dest.encoder.rate_control = Some(RateControl {
+            mode: RateControlMode::Bitrate,
+            crf: None,
+            bitrate: Some("600k".into()),
+        });
+        let second = compile(&score, &scion(dest), &store, &ff, &ff).unwrap();
+        assert!(second.plan.slots.iter().all(|s| s.cache == "hit"));
+        assert_eq!(second.graph.spine_key, first.graph.spine_key);
+        assert_eq!(second.plan.concat_cache, "miss");
+        assert_ne!(first.graph.concat.key, second.graph.concat.key);
+    }
+
+    #[test]
+    fn gap_replace_graph_delivers() {
+        let Ok(ff) = FfmpegX264::from_env() else {
+            eprintln!("skip gap_replace_graph_delivers — install ffmpeg");
+            return;
+        };
+        let score = score();
+        let dest = dest();
+        let store = Memory::new();
+        let clip = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "red", 1.2, 64))
+            .unwrap();
+        let hook = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "blue", 1.2, 64))
+            .unwrap();
+        let body = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "green", 2.2, 64))
+            .unwrap();
+        let cta = store
+            .put_blob(Kind::Material, &color_mp4(&ff, "yellow", 1.2, 64))
+            .unwrap();
+        let mut bindings = BTreeMap::new();
+        bindings.insert("hook".into(), bind(hook.as_str(), 0.0, 1.0));
+        bindings.insert("body".into(), bind(body.as_str(), 0.0, 2.0));
+        bindings.insert("cta".into(), bind(cta.as_str(), 0.0, 1.0));
+        let scion = Scion {
+            graft: GRAFT_SCHEMA.into(),
+            id: "9x16".into(),
+            concept: score.concept.clone(),
+            parent: None,
+            change_request: None,
+            dest,
+            graph: Some(CompositionGraph {
+                mode: GraphMode::Replace,
+                nodes: vec![
+                    GraphNode {
+                        id: "a".into(),
+                        op: "source".into(),
+                        inputs: vec![],
+                        material: Some(clip.as_str().to_string()),
+                        source: Some(
+                            TimedRange::from_seconds(FrameRate::new(10, 1), 0.0, 1.0).unwrap(),
+                        ),
+                        place: None,
+                        enable: None,
+                        role: None,
+                        params: None,
+
+                        keys: None,
+                        nodes: Vec::new(),
+                    },
+                    GraphNode {
+                        id: "black".into(),
+                        op: "gap".into(),
+                        inputs: vec![],
+                        material: None,
+                        source: None,
+                        place: None,
+                        enable: None,
+                        role: None,
+                        params: Some(serde_json::json!({"duration": 0.5})),
+
+                        keys: None,
+                        nodes: Vec::new(),
+                    },
+                    GraphNode {
+                        id: "out".into(),
+                        op: "concat".into(),
+                        inputs: vec!["a".into(), "black".into()],
+                        material: None,
+                        source: None,
+                        place: None,
+                        enable: None,
+                        role: None,
+                        params: None,
+
+                        keys: None,
+                        nodes: Vec::new(),
+                    },
+                ],
+            }),
+            layers: vec![BindingLayer {
+                name: Layer::Base,
+                bindings,
+            }],
+        };
+        let out = compile(&score, &scion, &store, &ff, &ff).unwrap();
+        assert!(out.encoded);
+        assert!(out.graph.replace);
+        let mp4 = store
+            .get_blob(Kind::Concat, out.concat.as_ref().unwrap())
+            .unwrap();
+        let probed = probe_media(&mp4).unwrap();
+        assert_eq!(probed.video_codec, "h264");
+        assert!((probed.duration_s - 1.5).abs() < 0.25);
     }
 }

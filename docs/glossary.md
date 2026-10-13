@@ -7,12 +7,12 @@ Always lowercase **graft** for the project and the command, like **git**.
 | **concept** | One intent. UUID. Owns score history. Not a file. |
 | **score** | The recipe: ordered slots, layers, dest defaults. Text. Git-able. Analog of a USD stage or IMF CPL. |
 | **slot** | Typed span on the score clock: `id`, `role`, `[t0, t1)`, constraints. Addressable by name. |
-| **role** | Public addressing scheme: `hook` `body` `proof` `cta` `vo` `captions` `bed` `brand`. |
+| **role** | Addressing label on dest time: `hook` `body` `proof` `cta` `vo` `captions` `bed` `brand`. Not the composition graph. |
 | **window** | Declared metric span on a slot (e.g. hook_rate `[0, 3)`). May differ from the take's duration. |
 | **material** | Immutable essence. CAS hash of original bytes. |
 | **binding** | `slot_id → { material, in, out, params }`. What a variant swaps. |
 | **params** | `speed` is applied at encode. Other keys are reserved and rejected. |
-| **layer** | USD-like opinion: `base` \| `copy` \| `grade` \| `legal`. Strength, not a pixel merge. |
+| **layer** | USD-like opinion: `base` \| `copy` \| `grade` \| `legal`. Strength, not a pixel merge. `grade` is not a LUT. |
 | **dest** | Output spec: size, fps, color, encoder fingerprint. `9x16` is a dest. |
 | **scion** | A named variant: concept + bindings + dest. Example: `hook_v3 + body_v1 + cta_v1 @ 9x16`. |
 | **rootstock** | Metaphor: the concept / score the scion is grafted onto. |
@@ -25,4 +25,6 @@ Always lowercase **graft** for the project and the command, like **git**.
 | **feedback** | Raw platform metric plus resolved slots/kerfs against one build. |
 | **CAS** | Content-addressed store of materials (and, on a server, of slot_encode / kerf blobs). |
 | **adapter** | Guest import/export. Lossy by default. See [adapters.md](adapters.md). |
-| **grain** | Smallest replaceable unit: frame (intra) or GOP (Long-GOP). |
+| **grain** | Working cache: node output (usually frame). Delivery Long-GOP: GOP/IDR, and only if no filter sits downstream. |
+| **pad** | A filtergraph input or intermediate: source + range + dest placement + chain + working format. See [composition.md](composition.md). |
+| **working format** | 10/16-bit pix_fmt used for grade/LUT/key. Not delivery `yuv420p`. |

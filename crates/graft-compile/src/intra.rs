@@ -279,6 +279,11 @@ impl EncodeBackend for FrameIntra {
     }
 
     fn encode_slot(&self, req: &SlotEncodeRequest<'_>) -> Result<Vec<u8>, EncodeError> {
+        if req.action.binding.remap_is_curve() {
+            return Err(EncodeError::Invalid(
+                "time remap needs the ffmpeg working path (not graft-intra)".into(),
+            ));
+        }
         let seq = IntraSeq::decode(req.material)?;
         if seq.width != req.dest.width || seq.height != req.dest.height {
             return Err(EncodeError::Invalid(format!(
@@ -442,6 +447,7 @@ mod tests {
             dest_default: Some("9x16".into()),
             spill_threshold_frames: 4,
             joins: Vec::new(),
+            markers: Vec::new(),
         }
     }
 
@@ -453,6 +459,7 @@ mod tests {
             rate: FrameRate::new(10, 1),
             pix_fmt: "rgb24".into(),
             color: "srgb".into(),
+            working: None,
             encoder: Encoder::graft_intra(),
         }
     }
@@ -463,6 +470,12 @@ mod tests {
             source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: None,
             audio: None,
+            nested: None,
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
         }
     }
 
@@ -499,6 +512,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -590,6 +604,12 @@ mod tests {
             source: TimedRange::from_seconds(FrameRate::new(10, 1), in_s, out_s).unwrap(),
             params: Some(serde_json::json!({ "speed": speed })),
             audio: None,
+            nested: None,
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
         }
     }
 
@@ -623,6 +643,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -700,6 +721,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -840,6 +862,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,
@@ -941,6 +964,7 @@ mod tests {
                 parent: None,
                 change_request: None,
                 dest: dest.clone(),
+                graph: None,
                 layers: vec![BindingLayer {
                     name: Layer::Base,
                     bindings,

@@ -129,7 +129,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF_NAME}"
-          notes="Schema format id is 0.2.0. Needs ffmpeg on PATH. See docs/install.md. crates.io name graft is taken (orbitinghail); this CLI stays unpublished there. Distro recipes in dist/ are not yet listed on pkg.bot."
+          notes="Schema format id is 0.2.0. Needs ffmpeg on PATH. See docs/install.md. crates.io name graft is taken (orbitinghail); this CLI stays unpublished there. Install from GitHub Releases, the Homebrew tap, or cargo --git."
           set -- dist/graft-* dist/*.tar.gz dist/*.deb dist/SHA256SUMS
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$@" --clobber

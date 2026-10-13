@@ -4,7 +4,7 @@ use graft_cas::{ActionKey, BlobId, Kind, Store};
 
 use crate::graph::{
     ActionGraph, AudioEncodeAction, AudioMixAction, CaptionsAction, ConcatAction, KerfAction,
-    OverlayMixAction, SlotEncodeAction,
+    NodeAction, OverlayMixAction, SlotEncodeAction,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +71,12 @@ pub struct ScheduledOverlayMix {
     pub cache: CacheStatus,
 }
 
+#[derive(Clone, Debug)]
+pub struct ScheduledNode {
+    pub action: NodeAction,
+    pub cache: CacheStatus,
+}
+
 /// Hits and misses from the action cache. Not a scion JSON diff.
 #[derive(Clone, Debug)]
 pub struct Schedule {
@@ -79,6 +85,7 @@ pub struct Schedule {
     pub overlay_audio: Vec<ScheduledAudio>,
     pub captions: Vec<ScheduledCaptions>,
     pub kerfs: Vec<ScheduledKerf>,
+    pub nodes: Vec<ScheduledNode>,
     pub audio_mix: Option<ScheduledAudioMix>,
     pub overlay_mix: Option<ScheduledOverlayMix>,
     pub concat: ScheduledConcat,
@@ -154,6 +161,13 @@ pub fn schedule(graph: &ActionGraph, store: &dyn Store) -> Result<Schedule, graf
             })
         })
         .transpose()?;
+    let mut nodes = Vec::new();
+    for action in &graph.nodes {
+        nodes.push(ScheduledNode {
+            action: action.clone(),
+            cache: lookup(store, &action.key, Kind::Node)?,
+        });
+    }
     let concat = ScheduledConcat {
         action: graph.concat.clone(),
         cache: lookup(store, &graph.concat.key, Kind::Concat)?,
@@ -164,6 +178,7 @@ pub fn schedule(graph: &ActionGraph, store: &dyn Store) -> Result<Schedule, graf
         overlay_audio,
         captions,
         kerfs,
+        nodes,
         audio_mix,
         overlay_mix,
         concat,

@@ -15,6 +15,8 @@ pub enum Role {
     Captions,
     Bed,
     Brand,
+    Overlay,
+    Sfx,
 }
 
 impl Role {
@@ -28,6 +30,8 @@ impl Role {
             Self::Captions => "captions",
             Self::Bed => "bed",
             Self::Brand => "brand",
+            Self::Overlay => "overlay",
+            Self::Sfx => "sfx",
         }
     }
 
@@ -41,6 +45,8 @@ impl Role {
             "captions" => Ok(Self::Captions),
             "bed" => Ok(Self::Bed),
             "brand" => Ok(Self::Brand),
+            "overlay" => Ok(Self::Overlay),
+            "sfx" => Ok(Self::Sfx),
             other => Err(Error::invalid(format!("unknown role {other:?}"))),
         }
     }

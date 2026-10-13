@@ -8,18 +8,19 @@ use std::time::Instant;
 use anyhow::{bail, Context, Result};
 use graft_cas::{Fs, Kind, Object, Remote, Store};
 use graft_compile::{
-    compile, declared_signal_range, dirty_from_signal_range, lower, materials_present,
-    prev_overlay, probe_bytes, write_time_map_artifact, FfmpegX264, FrameIntra, MaterialKind,
-    Unimplemented,
+    compile_in, declared_signal_range, dirty_from_signal_range, lower, materials_present,
+    prev_overlay, probe_bytes, write_time_map_artifact, FfmpegX264, FrameIntra, MaterialKind, Nest,
+    NestFamily, Unimplemented,
 };
 use graft_score::{
     effective_bindings, load_scion, load_score, load_time_map, merge_scions, parse_range, parse_wh,
-    require_slot_id, resolve_scion, save_json, semantic_diff, AudioBinding, Binding, BindingLayer,
-    BuildRecord, ChangeRequest, Dest, Encoder, Feedback, FeedbackResolution, FrameRange, FrameRate,
-    Layer, Scion, Score, Slot, TimeMap, TimedRange, Window, DEFAULT_SPILL_FRAMES, GRAFT_SCHEMA,
+    require_slot_id, resolve_scion, save_json, scion_has_nested, semantic_diff, AudioBinding,
+    Binding, BindingLayer, BuildRecord, ChangeRequest, Dest, Encoder, Feedback, FeedbackResolution,
+    FrameRange, FrameRate, Join, Layer, Marker, Scion, Score, Slot, TimeMap, TimedRange, Window,
+    DEFAULT_SPILL_FRAMES, GRAFT_SCHEMA,
 };
 
-use crate::{paths, preview};
+use crate::{composition, paths, preview};
 
 pub fn init(dir: &Path, from: Option<PathBuf>) -> Result<()> {
     std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
@@ -51,6 +52,7 @@ pub fn init(dir: &Path, from: Option<PathBuf>) -> Result<()> {
         dest_default: Some("9x16".into()),
         spill_threshold_frames: DEFAULT_SPILL_FRAMES,
         joins: Vec::new(),
+        markers: Vec::new(),
     };
     score.validate()?;
     save_json(&path, &score)?;
@@ -167,8 +169,10 @@ pub fn scion_create(
             rate: score.clock.rate,
             pix_fmt,
             color,
+            working: None,
             encoder,
         },
+        graph: None,
         layers: vec![BindingLayer {
             name: Layer::Base,
             bindings: BTreeMap::new(),
@@ -197,6 +201,7 @@ pub fn scion_fork(dir: &Path, source: String, id: String) -> Result<()> {
         parent: Some(source),
         change_request: None,
         dest: parent.dest.clone(),
+        graph: None,
         layers: Vec::new(),
     };
     child.validate()?;
@@ -239,6 +244,24 @@ pub fn scion_use(dir: &Path, id: String) -> Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[derive(Clone, Debug)]
+pub struct BindAudio {
+    pub in_s: f64,
+    pub out_s: f64,
+    pub place_start_s: Option<f64>,
+    pub place_duration_s: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BindOverlay {
+    pub x: Option<String>,
+    pub y: Option<String>,
+    pub opacity: Option<f64>,
+    pub motion: Option<graft_score::Motion>,
+    pub remap: Vec<graft_score::Keyframe>,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn bind(
     dir: &Path,
     slot: String,
@@ -248,13 +271,15 @@ pub fn bind(
     speed: Option<f64>,
     scion: Option<String>,
     layer: String,
+    audio_spec: Option<BindAudio>,
+    overlay_spec: Option<BindOverlay>,
 ) -> Result<()> {
     require_slot_id(&slot)?;
-    let score = load_score(&paths::score(dir))?;
+    let id = selected_scion_id(dir, scion)?;
+    let score = load_score_for(dir, &id)?;
     let slot_def = score
         .slot(&slot)
         .with_context(|| format!("score has no slot {slot}"))?;
-    let id = selected_scion_id(dir, scion)?;
     let path = paths::scion(dir, &id);
     let mut scion = load_scion(&path)?;
     let layer = Layer::parse(&layer)?;
@@ -277,14 +302,39 @@ pub fn bind(
     let end = out_s.unwrap_or(start + duration);
     let source = TimedRange::from_seconds(rate, start, end)?;
     let params = speed.map(|value| serde_json::json!({ "speed": value }));
-    let audio = resolved
-        .probe
-        .as_ref()
-        .filter(|probe| probe.has_audio)
-        .map(|_| AudioBinding {
+    let audio = if let Some(spec) = audio_spec {
+        let audio_source = TimedRange::from_seconds(rate, spec.in_s, spec.out_s)?;
+        let place = match (spec.place_start_s, spec.place_duration_s) {
+            (Some(start_s), Some(dur_s)) => Some(FrameRange::new(
+                score.clock.rate.frames_from_seconds(start_s)?.max(0),
+                score.clock.rate.frames_from_seconds(dur_s)?.max(1) as u64,
+            )),
+            (Some(start_s), None) => {
+                let dur = spec.out_s - spec.in_s;
+                Some(FrameRange::new(
+                    score.clock.rate.frames_from_seconds(start_s)?.max(0),
+                    score.clock.rate.frames_from_seconds(dur)?.max(1) as u64,
+                ))
+            }
+            _ => None,
+        };
+        Some(AudioBinding {
             material: resolved.id.clone(),
-            source,
-        });
+            source: audio_source,
+            place,
+        })
+    } else {
+        resolved
+            .probe
+            .as_ref()
+            .filter(|probe| probe.has_audio)
+            .map(|_| AudioBinding {
+                material: resolved.id.clone(),
+                source,
+                place: None,
+            })
+    };
+    let overlay = overlay_spec.unwrap_or_default();
     scion.ensure_layer(layer).bindings.insert(
         slot,
         Binding {
@@ -292,6 +342,12 @@ pub fn bind(
             source,
             params,
             audio,
+            nested: None,
+            x: overlay.x,
+            y: overlay.y,
+            opacity: overlay.opacity,
+            motion: overlay.motion,
+            remap: overlay.remap,
         },
     );
     scion.validate()?;
@@ -307,7 +363,7 @@ pub fn dirty(dir: &Path, scion: Option<String>, prev: Option<PathBuf>) -> Result
         .map(|path| load_scion(&paths::resolve_in_dir(dir, path)))
         .transpose()?;
     let store = Fs::open(paths::graft_dir(dir))?;
-    let outcome = compile_with_backend(&score, &scion, &store, false)?;
+    let outcome = compile_with_backend(&score, &scion, &store, false, &load_nest_family(dir)?)?;
     let mut plan = outcome.plan;
     if let Some(previous) = &prev {
         plan.prev_overlay = Some(prev_overlay(&score, &scion, previous));
@@ -342,6 +398,12 @@ pub fn dirty(dir: &Path, scion: Option<String>, prev: Option<PathBuf>) -> Result
         .filter(|slot| slot.cache == "miss")
         .map(|slot| slot.id.clone())
         .collect();
+    let nodes: Vec<String> = plan
+        .nodes
+        .iter()
+        .filter(|node| node.cache == "miss")
+        .map(|node| node.id.clone())
+        .collect();
     let mut mixes = Vec::new();
     if plan.audio_mix == Some("miss") {
         mixes.push("audio_mix");
@@ -358,6 +420,7 @@ pub fn dirty(dir: &Path, scion: Option<String>, prev: Option<PathBuf>) -> Result
         "kerfs": kerfs,
         "clean": clean,
         "overlay_audio": overlay_audio,
+        "nodes": nodes,
         "captions": captions,
         "mixes": mixes,
         "prev_overlay": plan.prev_overlay
@@ -394,15 +457,16 @@ fn compile_report(
     prev: Option<PathBuf>,
     out: Option<PathBuf>,
 ) -> Result<CompileReport> {
-    let score = load_score(&paths::score(dir))?;
-    let (_, scion) = load_selected_scion(dir, scion)?;
+    let (id, scion) = load_selected_scion(dir, scion)?;
+    let score = load_score_for(dir, &id)?;
+    let family = load_nest_family(dir)?;
     let previous = prev
         .map(|path| load_scion(&paths::resolve_in_dir(dir, path)))
         .transpose()?;
     let store_root = paths::graft_dir(dir);
     let store = Fs::open(&store_root)?;
     let started = Instant::now();
-    let mut outcome = compile_with_backend(&score, &scion, &store, true)?;
+    let mut outcome = compile_with_backend(&score, &scion, &store, true, &family)?;
     let encode_ms = started.elapsed().as_millis() as u64;
     if let Some(previous) = &previous {
         outcome.plan.prev_overlay = Some(prev_overlay(&score, &scion, previous));
@@ -616,6 +680,7 @@ fn iterate_inner(
             slots: resolved.slots.clone(),
         }),
         dest: parent.dest.clone(),
+        graph: None,
         layers: Vec::new(),
     };
     child.validate()?;
@@ -632,7 +697,9 @@ fn iterate_inner(
 
 pub fn export(dir: &Path, format: &str, scion: Option<String>, out: PathBuf) -> Result<()> {
     let score = load_score(&paths::score(dir))?;
-    let (_, scion) = load_selected_scion(dir, scion)?;
+    let (id, _) = load_selected_scion(dir, scion)?;
+    let all = load_scions(dir)?;
+    let scion = resolve_scion(&all, &id)?;
     match format {
         "otio" => {
             let out = paths::resolve_in_dir(dir, out);
@@ -649,22 +716,61 @@ pub fn import(dir: &Path, format: &str, file: PathBuf, id: String) -> Result<()>
     let score = load_score(&paths::score(dir))?;
     match format {
         "otio" => {
-            let (scion, loss) =
-                graft_otio::import_otio(&score, &paths::resolve_in_dir(dir, file), &id)?;
-            save_json(&paths::scion(dir, &id), &scion)?;
-            save_json(&paths::scion(dir, &id).with_extension("loss.json"), &loss)?;
+            let imported = graft_otio::import_otio(&score, &paths::resolve_in_dir(dir, file), &id)?;
+            apply_sidecar_score(dir, &imported.joins, &imported.markers)?;
+            save_json(&paths::scion(dir, &id), &imported.scion)?;
+            save_json(
+                &paths::scion(dir, &id).with_extension("loss.json"),
+                &imported.loss,
+            )?;
             write_head(dir, &id)?;
-            paths::print_json(&serde_json::json!({"scion": id, "loss": loss}))
+            paths::print_json(&serde_json::json!({
+                "scion": id,
+                "loss": imported.loss,
+                "joins": imported.joins.len(),
+                "markers": imported.markers.len()
+            }))
         }
         _ => bail!("unsupported import format {format}"),
     }
 }
 
+fn apply_sidecar_score(dir: &Path, joins: &[Join], markers: &[Marker]) -> Result<()> {
+    if joins.is_empty() && markers.is_empty() {
+        return Ok(());
+    }
+    let path = paths::score(dir);
+    let mut score = load_score(&path)?;
+    for join in joins {
+        if let Some(existing) = score
+            .joins
+            .iter_mut()
+            .find(|row| row.left == join.left && row.right == join.right)
+        {
+            *existing = join.clone();
+        } else {
+            score.joins.push(join.clone());
+        }
+    }
+    for marker in markers {
+        if let Some(existing) = score.markers.iter_mut().find(|row| row.id == marker.id) {
+            *existing = marker.clone();
+        } else {
+            score.markers.push(marker.clone());
+        }
+    }
+    score.validate()?;
+    save_json(&path, &score)?;
+    eprintln!("wrote {}", path.display());
+    Ok(())
+}
+
 pub fn preview(dir: &Path, scion: Option<String>, out: PathBuf) -> Result<()> {
-    let score = load_score(&paths::score(dir))?;
-    let (_, scion) = load_selected_scion(dir, scion)?;
+    let (id, scion) = load_selected_scion(dir, scion)?;
+    let score = load_score_for(dir, &id)?;
     let store = Fs::open(paths::graft_dir(dir))?;
-    preview::render(dir, &score, &scion, &store, &out)
+    let family = load_nest_family(dir)?;
+    preview::render(dir, &score, &scion, &store, &out, &family)
 }
 
 pub fn migrate(dir: &Path) -> Result<()> {
@@ -766,32 +872,45 @@ fn compile_with_backend(
     scion: &Scion,
     store: &Fs,
     encode: bool,
+    family: &NestFamily,
 ) -> Result<graft_compile::CompileOutcome> {
     if !encode {
-        return Ok(compile(
+        return Ok(compile_in(
             score,
             scion,
             store,
             &Unimplemented,
             &graft_compile::ConcatUnimplemented,
+            family,
         )?);
     }
-    if FrameIntra::supports(&scion.dest) {
-        return Ok(compile(score, scion, store, &FrameIntra, &FrameIntra)?);
+    if FrameIntra::supports(&scion.dest) && !scion_has_nested(scion) {
+        return Ok(compile_in(
+            score,
+            scion,
+            store,
+            &FrameIntra,
+            &FrameIntra,
+            family,
+        )?);
     }
     if FfmpegX264::supports(&scion.dest) {
         let ff = FfmpegX264::from_env()?;
+        if scion_has_nested(scion) {
+            return Ok(compile_in(score, scion, store, &ff, &ff, family)?);
+        }
         let graph = lower(score, scion)?;
         if materials_present(&graph, store) {
-            return Ok(compile(score, scion, store, &ff, &ff)?);
+            return Ok(compile_in(score, scion, store, &ff, &ff, family)?);
         }
     }
-    Ok(compile(
+    Ok(compile_in(
         score,
         scion,
         store,
         &Unimplemented,
         &graft_compile::ConcatUnimplemented,
+        family,
     )?)
 }
 
@@ -837,6 +956,9 @@ fn resolve_material(dir: &Path, spec: &str, role: graft_score::Role) -> Result<R
             if role == graft_score::Role::Captions && looks_like_captions(&bytes) {
                 eprintln!("probe: captions {size} bytes");
                 None
+            } else if composition::looks_like_lut(&bytes) {
+                eprintln!("probe: LUT {size} bytes");
+                None
             } else {
                 bail!("material is not decodable media ({size} bytes)")
             }
@@ -878,6 +1000,44 @@ fn load_scions(dir: &Path) -> Result<BTreeMap<String, Scion>> {
         graft_score::validate_family(&score, &out)?;
     }
     Ok(out)
+}
+
+fn load_score_for(dir: &Path, scion_id: &str) -> Result<Score> {
+    let nest = paths::nest_score(dir, scion_id);
+    if nest.is_file() {
+        return Ok(load_score(&nest)?);
+    }
+    Ok(load_score(&paths::score(dir))?)
+}
+
+fn load_nest_family(dir: &Path) -> Result<NestFamily> {
+    let mut family = NestFamily::default();
+    let root = dir.join("nests");
+    if !root.is_dir() {
+        return Ok(family);
+    }
+    for entry in std::fs::read_dir(&root)? {
+        let path = entry?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let score_path = path.join(paths::SCORE_FILE);
+        if !score_path.is_file() {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| anyhow::anyhow!("nest directory name"))?;
+        let scion_path = paths::scion(dir, name);
+        if !scion_path.is_file() {
+            continue;
+        }
+        let score = load_score(&score_path)?;
+        let scion = load_scion(&scion_path)?;
+        family.nests.insert(scion.id.clone(), Nest { score, scion });
+    }
+    Ok(family)
 }
 
 fn selected_scion_id(dir: &Path, explicit: Option<String>) -> Result<String> {
@@ -1026,7 +1186,7 @@ const TAKE_EXTS: &[&str] = &[
     "mov", "mp4", "mkv", "webm", "m4v", "wav", "aiff", "aif", "m4a", "aac", "vtt", "srt",
 ];
 const ROLE_ORDER: &[&str] = &[
-    "hook", "body", "proof", "cta", "vo", "captions", "bed", "brand",
+    "hook", "body", "proof", "cta", "vo", "captions", "bed", "sfx", "brand", "overlay",
 ];
 
 struct DiscoveredTake {
@@ -1051,9 +1211,11 @@ pub fn ship(
         add_missing_slots_from_takes(dir, &from)?;
     }
     ensure_root_scion(dir, scion.clone(), dest, encoder, &from)?;
+    author_nests(dir, &from)?;
     if existed {
         bind_takes(dir, &from)?;
     }
+    author_composition_from(dir, &from)?;
     require_spine_bound(dir)?;
     let report = compile_report(dir, scion, None, Some(out))?;
     if !report.encoded {
@@ -1062,6 +1224,7 @@ pub fn ship(
     paths::print_json(&report.json)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn swap(
     dir: &Path,
     slot: String,
@@ -1070,37 +1233,97 @@ pub fn swap(
     out: Option<PathBuf>,
     out_dir: Option<PathBuf>,
     scion: Option<String>,
+    in_s: Option<f64>,
+    out_s: Option<f64>,
+    x: Option<String>,
+    y: Option<String>,
 ) -> Result<()> {
     require_slot_id(&slot)?;
-    match (file, from) {
-        (None, None) => bail!("graft swap {slot} needs a take file or --from <dir>"),
-        (Some(_), Some(_)) => bail!("pass a take file or --from, not both"),
-        (Some(file), None) => {
-            let report = swap_one(dir, &slot, &paths::resolve_in_dir(dir, file), scion, out)?;
-            paths::print_json(&report.json)
+    let score = load_score(&paths::score(dir))?;
+    if score.slot(&slot).is_none() {
+        match (file, from) {
+            (None, None) => bail!("graft swap {slot} needs a LUT file or --from <dir>"),
+            (Some(_), Some(_)) => bail!("pass a LUT file or --from, not both"),
+            (Some(file), None) => {
+                let report =
+                    swap_graph_node(dir, &slot, &paths::resolve_in_dir(dir, file), scion, out)?;
+                paths::print_json(&report.json)
+            }
+            (None, Some(from)) => {
+                let from = paths::resolve_in_dir(dir, from);
+                let files = composition::list_lut_files(&from)?;
+                if files.is_empty() {
+                    bail!("no LUT files in {}", from.display());
+                }
+                let out_dir =
+                    paths::resolve_in_dir(dir, out_dir.unwrap_or_else(|| PathBuf::from("out")));
+                std::fs::create_dir_all(&out_dir)?;
+                let parent = selected_scion_id(dir, scion)?;
+                let mut variants = Vec::new();
+                for file in files {
+                    let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("look");
+                    let dest = out_dir.join(format!("{slot}-{stem}.mp4"));
+                    let report =
+                        swap_graph_node(dir, &slot, &file, Some(parent.clone()), Some(dest))?;
+                    variants.push(report.json);
+                }
+                paths::print_json(&serde_json::json!({
+                    "parent": parent,
+                    "slot": slot,
+                    "variants": variants
+                }))
+            }
         }
-        (None, Some(from)) => {
-            let from = paths::resolve_in_dir(dir, from);
-            let files = list_pool_takes(&from)?;
-            if files.is_empty() {
-                bail!("no takes in {}", from.display());
+    } else if file.is_none() && from.is_none() && (x.is_some() || y.is_some()) {
+        let report = swap_place(dir, &slot, scion, out, x, y)?;
+        paths::print_json(&report.json)
+    } else {
+        match (file, from) {
+            (None, None) => bail!("graft swap {slot} needs a take file or --from <dir>"),
+            (Some(_), Some(_)) => bail!("pass a take file or --from, not both"),
+            (Some(file), None) => {
+                let report = swap_one(
+                    dir,
+                    &slot,
+                    &paths::resolve_in_dir(dir, file),
+                    scion,
+                    out,
+                    in_s,
+                    out_s,
+                )?;
+                paths::print_json(&report.json)
             }
-            let out_dir =
-                paths::resolve_in_dir(dir, out_dir.unwrap_or_else(|| PathBuf::from("out")));
-            std::fs::create_dir_all(&out_dir)?;
-            let parent = selected_scion_id(dir, scion)?;
-            let mut variants = Vec::new();
-            for file in files {
-                let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("take");
-                let dest = out_dir.join(format!("{slot}-{stem}.mp4"));
-                let report = swap_one(dir, &slot, &file, Some(parent.clone()), Some(dest))?;
-                variants.push(report.json);
+            (None, Some(from)) => {
+                let from = paths::resolve_in_dir(dir, from);
+                let files = list_pool_takes(&from)?;
+                if files.is_empty() {
+                    bail!("no takes in {}", from.display());
+                }
+                let out_dir =
+                    paths::resolve_in_dir(dir, out_dir.unwrap_or_else(|| PathBuf::from("out")));
+                std::fs::create_dir_all(&out_dir)?;
+                let parent = selected_scion_id(dir, scion)?;
+                let mut variants = Vec::new();
+                for file in files {
+                    let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("take");
+                    let dest = out_dir.join(format!("{slot}-{stem}.mp4"));
+                    let report = swap_one(
+                        dir,
+                        &slot,
+                        &file,
+                        Some(parent.clone()),
+                        Some(dest),
+                        None,
+                        None,
+                    )?;
+                    variants.push(report.json);
+                }
+                paths::print_json(&serde_json::json!({
+                    "parent": parent,
+                    "slot": slot,
+                    "variants": variants
+                }))
             }
-            paths::print_json(&serde_json::json!({
-                "parent": parent,
-                "slot": slot,
-                "variants": variants
-            }))
         }
     }
 }
@@ -1115,13 +1338,49 @@ pub fn address(
     let score = load_score(&paths::score(dir))?;
     let (record, time_map) = load_build(dir, &build)?;
     let range = signal_range(&score, &time_map, &kind, t.as_deref())?;
-    let dirty = dirty_from_signal_range(
+    let mut dirty = dirty_from_signal_range(
         &time_map,
         &score,
         &kind,
         range,
         Some(time_map.dest_id.clone()),
     );
+    let scions = load_scions(dir)?;
+    let family = load_nest_family(dir)?;
+    if let Ok(resolved) = resolve_scion(&scions, &record.scion) {
+        if let Some(graph) = resolved.graph.as_ref() {
+            dirty.nodes =
+                graft_compile::covering_graph_nodes(graph, dirty.signal.range, score.clock.rate);
+        }
+        if let Ok(bindings) = effective_bindings(&score, &resolved) {
+            for slot_id in &dirty.slots {
+                let Some(nested) = bindings.get(slot_id).and_then(|b| b.nested_id()) else {
+                    continue;
+                };
+                let Ok(inner) = resolve_scion(&scions, nested) else {
+                    continue;
+                };
+                let Some(graph) = inner.graph.as_ref() else {
+                    continue;
+                };
+                let nest_frames = family
+                    .nests
+                    .get(nested)
+                    .map(|nest| nest.score.clock.duration_frames)
+                    .unwrap_or(1)
+                    .max(1);
+                let nest_range = FrameRange::new(0, nest_frames);
+                let nest_rate = family
+                    .nests
+                    .get(nested)
+                    .map(|nest| nest.score.clock.rate)
+                    .unwrap_or(inner.dest.rate);
+                for id in graft_compile::covering_graph_nodes(graph, nest_range, nest_rate) {
+                    dirty.nodes.push(format!("{nested}.{id}"));
+                }
+            }
+        }
+    }
     let feedback_id = unique_feedback_id(dir, &kind)?;
     let feedback = Feedback {
         graft: GRAFT_SCHEMA.into(),
@@ -1139,22 +1398,159 @@ pub fn address(
     feedback.validate()?;
     std::fs::create_dir_all(paths::feedback_dir(dir))?;
     save_json(&paths::feedback(dir, &feedback_id), &feedback)?;
-    let slot = dirty.slots.first().cloned().unwrap_or_else(|| kind.clone());
+    let target = dirty
+        .slots
+        .first()
+        .cloned()
+        .or_else(|| dirty.nodes.first().cloned())
+        .unwrap_or_else(|| kind.clone());
     let child = match scion {
         Some(id) => id,
-        None => unique_scion_id(dir, &format!("{slot}-next"))?,
+        None => unique_scion_id(dir, &format!("{target}-next"))?,
     };
     let mut iterated = iterate_inner(dir, record.id.clone(), feedback_id.clone(), child.clone())?;
-    let next = format!("graft swap {slot} <file>");
+    let switch_node = dirty.nodes.iter().find(|id| {
+        id.rsplit_once('.')
+            .map(|(_, name)| name == "switch")
+            .unwrap_or(id.as_str() == "switch")
+    });
+    let next = if let Some(qualified) =
+        switch_node.or_else(|| dirty.nodes.iter().find(|id| id.contains('.')))
+    {
+        match qualified.split_once('.') {
+            Some((nest, node)) => format!("graft swap {node} <file> --scion {nest}"),
+            None => format!("graft swap {qualified} <file>"),
+        }
+    } else if dirty.slots.is_empty() && !dirty.nodes.is_empty() {
+        format!("graft swap {target} <file>")
+    } else {
+        format!("graft swap {target} <file> [--in --src-out]")
+    };
     eprintln!("next  {next}");
     if let Some(obj) = iterated.as_object_mut() {
         obj.insert("kind".into(), serde_json::json!(kind));
         obj.insert("build".into(), serde_json::json!(build));
         obj.insert("kerfs".into(), serde_json::json!(dirty.kerfs));
+        obj.insert("nodes".into(), serde_json::json!(dirty.nodes));
         obj.insert("clean".into(), serde_json::json!(dirty.clean));
         obj.insert("next".into(), serde_json::json!(next));
     }
     paths::print_json(&iterated)
+}
+
+fn swap_graph_node(
+    dir: &Path,
+    node_id: &str,
+    file: &Path,
+    parent: Option<String>,
+    out: Option<PathBuf>,
+) -> Result<CompileReport> {
+    let source_id = selected_scion_id(dir, parent)?;
+    let all = load_scions(dir)?;
+    let source = all
+        .get(&source_id)
+        .with_context(|| format!("unknown scion {source_id}"))?;
+    let resolved = resolve_scion(&all, &source_id)?;
+    let binds_locally = source
+        .graph
+        .as_ref()
+        .is_some_and(|graph| graft_score::graph_has_node(&graph.nodes, node_id));
+    let main = load_score(&paths::score(dir))?;
+    let nest_clip = source.concept != main.concept;
+    let child_id = if binds_locally && !nest_clip {
+        let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("v");
+        unique_scion_id(dir, &format!("{node_id}-{}", sanitize_id_part(stem)))?
+    } else {
+        source_id.clone()
+    };
+    if child_id != source_id {
+        scion_fork(dir, source_id.clone(), child_id.clone())?;
+    }
+    let mut graph = resolved
+        .graph
+        .clone()
+        .unwrap_or(graft_score::CompositionGraph {
+            mode: graft_score::GraphMode::Append,
+            nodes: Vec::new(),
+        });
+    composition::apply_node_file(dir, &mut graph, node_id, file)?;
+    let path = paths::scion(dir, &child_id);
+    let mut child = load_scion(&path)?;
+    child.graph = Some(graph);
+    child.validate()?;
+    save_json(&path, &child)?;
+    eprintln!("wrote {}", path.display());
+    let report = compile_report(dir, Some(child_id), None, out)?;
+    if !report.encoded {
+        bail!("swap compiled a plan only — bind a LUT and ship first");
+    }
+    assert_swap_reuse(&report.json, node_id)?;
+    Ok(report)
+}
+
+fn swap_place(
+    dir: &Path,
+    slot: &str,
+    parent: Option<String>,
+    out: Option<PathBuf>,
+    x: Option<String>,
+    y: Option<String>,
+) -> Result<CompileReport> {
+    let score = load_score(&paths::score(dir))?;
+    let source_id = selected_scion_id(dir, parent)?;
+    let all = load_scions(dir)?;
+    let source = all
+        .get(&source_id)
+        .with_context(|| format!("unknown scion {source_id}"))?;
+    let binds_locally = source
+        .layers
+        .iter()
+        .any(|layer| layer.bindings.contains_key(slot));
+    let child_id = if binds_locally {
+        unique_scion_id(dir, &format!("{slot}-place"))?
+    } else {
+        source_id.clone()
+    };
+    if child_id != source_id {
+        scion_fork(dir, source_id.clone(), child_id.clone())?;
+    }
+    let resolved = resolve_scion(&all, &source_id)?;
+    let mut binding = effective_bindings(&score, &resolved)?
+        .get(slot)
+        .cloned()
+        .with_context(|| format!("slot {slot} is unbound"))?;
+    if let Some(x) = x {
+        binding.x = Some(x);
+        if let Some(motion) = binding.motion.as_mut() {
+            motion.x.clear();
+        }
+    }
+    if let Some(y) = y {
+        binding.y = Some(y);
+        if let Some(motion) = binding.motion.as_mut() {
+            motion.y.clear();
+        }
+    }
+    if binding.motion.as_ref().is_some_and(|motion| {
+        motion.x.is_empty() && motion.y.is_empty() && motion.opacity.is_empty()
+    }) {
+        binding.motion = None;
+    }
+    let path = paths::scion(dir, &child_id);
+    let mut child = load_scion(&path)?;
+    child
+        .ensure_layer(Layer::Base)
+        .bindings
+        .insert(slot.into(), binding);
+    child.validate()?;
+    save_json(&path, &child)?;
+    eprintln!("wrote {}", path.display());
+    let report = compile_report(dir, Some(child_id), None, out)?;
+    if !report.encoded {
+        bail!("swap compiled a plan only — bind real takes and ship first");
+    }
+    assert_swap_reuse(&report.json, slot)?;
+    Ok(report)
 }
 
 fn swap_one(
@@ -1163,6 +1559,8 @@ fn swap_one(
     file: &Path,
     parent: Option<String>,
     out: Option<PathBuf>,
+    in_s: Option<f64>,
+    out_s: Option<f64>,
 ) -> Result<CompileReport> {
     let score = load_score(&paths::score(dir))?;
     if score.slot(slot).is_none() {
@@ -1186,15 +1584,64 @@ fn swap_one(
     if child_id != source_id {
         scion_fork(dir, source_id.clone(), child_id.clone())?;
     }
+    let parent_binding = resolve_scion(&all, &source_id)
+        .ok()
+        .and_then(|resolved| effective_bindings(&score, &resolved).ok())
+        .and_then(|bindings| bindings.get(slot).cloned());
+    let parent_jl = parent_binding.as_ref().and_then(|binding| {
+        binding.audio.clone().and_then(|audio| {
+            let pic_s = binding.source.end_seconds() - binding.source.start_seconds();
+            let aud_s = audio.source.end_seconds() - audio.source.start_seconds();
+            if audio.place.is_some() || (pic_s - aud_s).abs() > 1.0 / 60.0 {
+                Some((binding.source.start_seconds(), audio))
+            } else {
+                None
+            }
+        })
+    });
+    let overlay_spec = parent_binding.as_ref().and_then(|binding| {
+        if binding.x.is_some()
+            || binding.y.is_some()
+            || binding.opacity.is_some()
+            || binding.motion.is_some()
+            || !binding.remap.is_empty()
+        {
+            Some(BindOverlay {
+                x: binding.x.clone(),
+                y: binding.y.clone(),
+                opacity: binding.opacity,
+                motion: binding.motion.clone(),
+                remap: binding.remap.clone(),
+            })
+        } else {
+            None
+        }
+    });
+    let audio_spec = parent_jl.as_ref().map(|(old_in, audio)| {
+        let delta = in_s.unwrap_or(0.0) - old_in;
+        BindAudio {
+            in_s: (audio.source.start_seconds() + delta).max(0.0),
+            out_s: (audio.source.end_seconds() + delta).max(0.001),
+            place_start_s: audio
+                .place
+                .map(|place| score.clock.rate.seconds_from_frames(place.start)),
+            place_duration_s: audio
+                .place
+                .map(|place| score.clock.rate.seconds_from_frames(place.duration as i64))
+                .or_else(|| Some(audio.source.end_seconds() - audio.source.start_seconds())),
+        }
+    });
     bind(
         dir,
         slot.to_string(),
         file.to_string_lossy().into_owned(),
-        None,
-        None,
+        in_s,
+        out_s,
         None,
         Some(child_id.clone()),
         "base".into(),
+        audio_spec,
+        overlay_spec,
     )?;
     let report = compile_report(dir, Some(child_id), None, out)?;
     if !report.encoded {
@@ -1224,10 +1671,13 @@ fn assert_swap_reuse(json: &serde_json::Value, slot: &str) -> Result<()> {
 }
 
 fn init_from_takes(dir: &Path, from: &Path) -> Result<()> {
+    if composition::slot_drafts(from)?.is_some() {
+        return init_from_composition(dir, from);
+    }
     let takes = discover_takes(from)?;
     if takes.is_empty() {
         bail!(
-            "no named takes in {} (expected hook.mov, body.mov, cta.mov, …)",
+            "no composition in {} — write composition.json slots (file + in/out on a library clip) or named hook.mov / body.mov",
             from.display()
         );
     }
@@ -1245,6 +1695,7 @@ fn init_from_takes(dir: &Path, from: &Path) -> Result<()> {
         dest_default: Some("9x16".into()),
         spill_threshold_frames: DEFAULT_SPILL_FRAMES,
         joins: Vec::new(),
+        markers: Vec::new(),
     };
     let mut score = score;
     score.recompute_duration();
@@ -1255,14 +1706,50 @@ fn init_from_takes(dir: &Path, from: &Path) -> Result<()> {
     std::fs::create_dir_all(paths::graft_dir(dir))?;
     eprintln!("wrote {}", paths::score(dir).display());
     ensure_root_scion(dir, None, None, "x264".into(), from)?;
-    bind_takes(dir, from)
+    bind_takes(dir, from)?;
+    author_composition_from(dir, from)
+}
+
+fn init_from_composition(dir: &Path, from: &Path) -> Result<()> {
+    let drafts = composition::slot_drafts(from)?
+        .ok_or_else(|| anyhow::anyhow!("composition.json has no slots"))?;
+    let (rate, _) = dest_from_drafts(&drafts)?;
+    let slots = slots_from_drafts(&drafts, rate)?;
+    let mut score = Score {
+        graft: GRAFT_SCHEMA.into(),
+        concept: uuid::Uuid::new_v4().to_string(),
+        clock: graft_score::Clock {
+            rate,
+            duration_frames: 1,
+        },
+        slots,
+        layers: vec![Layer::Base, Layer::Copy, Layer::Grade, Layer::Legal],
+        dest_default: Some("9x16".into()),
+        spill_threshold_frames: DEFAULT_SPILL_FRAMES,
+        joins: Vec::new(),
+        markers: Vec::new(),
+    };
+    score.recompute_duration();
+    score.validate()?;
+    save_json(&paths::score(dir), &score)?;
+    std::fs::create_dir_all(paths::scions(dir))?;
+    std::fs::create_dir_all(paths::feedback_dir(dir))?;
+    std::fs::create_dir_all(paths::graft_dir(dir))?;
+    eprintln!("wrote {}", paths::score(dir).display());
+    ensure_root_scion(dir, None, None, "x264".into(), from)?;
+    author_nests(dir, from)?;
+    bind_drafts(dir, &drafts)?;
+    author_composition_from(dir, from)
 }
 
 fn add_missing_slots_from_takes(dir: &Path, from: &Path) -> Result<()> {
+    if let Some(drafts) = composition::slot_drafts(from)? {
+        return add_missing_slots_from_drafts(dir, &drafts);
+    }
     let takes = discover_takes(from)?;
     if takes.is_empty() {
         bail!(
-            "no named takes in {} (expected hook.mov, body.mov, cta.mov, …)",
+            "no composition in {} — write composition.json slots or named hook.mov / body.mov",
             from.display()
         );
     }
@@ -1310,8 +1797,7 @@ fn ensure_root_scion(
             return Ok(());
         }
     }
-    let takes = discover_takes(from).unwrap_or_default();
-    let (rate, probed) = dest_from_takes(&takes).unwrap_or((FrameRate::new(30, 1), None));
+    let (rate, probed) = dest_probe(from).unwrap_or((FrameRate::new(30, 1), None));
     let _ = rate;
     let spec = match dest {
         Some(value) => value,
@@ -1341,7 +1827,90 @@ fn ensure_root_scion(
     )
 }
 
+fn author_composition_from(dir: &Path, from: &Path) -> Result<()> {
+    let id = selected_scion_id(dir, None)?;
+    let all = load_scions(dir)?;
+    composition::author(dir, from, &id, &all)
+}
+
+fn author_nests(dir: &Path, from: &Path) -> Result<()> {
+    let nests = composition::nest_drafts(from)?;
+    if nests.is_empty() {
+        return Ok(());
+    }
+    let parent_id = selected_scion_id(dir, None)?;
+    let parent = load_scion(&paths::scion(dir, &parent_id))?;
+    for (id, nest) in nests {
+        ensure_nest_docs(dir, &id, &nest, &parent.dest)?;
+        bind_drafts_onto(dir, &nest.slots, &id)?;
+        let all = load_scions(dir)?;
+        composition::author_nest(dir, from, &id, &all)?;
+    }
+    Ok(())
+}
+
+fn ensure_nest_docs(
+    dir: &Path,
+    id: &str,
+    nest: &composition::NestDraft,
+    dest: &Dest,
+) -> Result<()> {
+    let score_path = paths::nest_score(dir, id);
+    if !score_path.is_file() {
+        std::fs::create_dir_all(paths::nest_dir(dir, id))?;
+        let slots = slots_from_drafts(&nest.slots, dest.rate)?;
+        let mut score = Score {
+            graft: GRAFT_SCHEMA.into(),
+            concept: uuid::Uuid::new_v4().to_string(),
+            clock: graft_score::Clock {
+                rate: dest.rate,
+                duration_frames: 1,
+            },
+            slots,
+            layers: vec![Layer::Base, Layer::Copy, Layer::Grade, Layer::Legal],
+            dest_default: Some(dest.id.clone()),
+            spill_threshold_frames: DEFAULT_SPILL_FRAMES,
+            joins: Vec::new(),
+            markers: Vec::new(),
+        };
+        score.recompute_duration();
+        score.validate()?;
+        save_json(&score_path, &score)?;
+        eprintln!("wrote {}", score_path.display());
+    }
+    let scion_path = paths::scion(dir, id);
+    if scion_path.is_file() {
+        let mut scion = load_scion(&scion_path)?;
+        scion.dest = dest.clone();
+        scion.validate()?;
+        save_json(&scion_path, &scion)?;
+        return Ok(());
+    }
+    let score = load_score(&score_path)?;
+    let scion = Scion {
+        graft: GRAFT_SCHEMA.into(),
+        id: id.into(),
+        concept: score.concept,
+        parent: None,
+        change_request: None,
+        dest: dest.clone(),
+        graph: None,
+        layers: vec![BindingLayer {
+            name: Layer::Base,
+            bindings: BTreeMap::new(),
+        }],
+    };
+    scion.validate()?;
+    std::fs::create_dir_all(paths::scions(dir))?;
+    save_json(&scion_path, &scion)?;
+    eprintln!("wrote {}", scion_path.display());
+    Ok(())
+}
+
 fn bind_takes(dir: &Path, from: &Path) -> Result<()> {
+    if let Some(drafts) = composition::slot_drafts(from)? {
+        return bind_drafts(dir, &drafts);
+    }
     let score = load_score(&paths::score(dir))?;
     let takes = discover_takes(from)?;
     let scion = selected_scion_id(dir, None)?;
@@ -1358,6 +1927,8 @@ fn bind_takes(dir: &Path, from: &Path) -> Result<()> {
             None,
             Some(scion.clone()),
             "base".into(),
+            None,
+            None,
         )?;
     }
     Ok(())
@@ -1375,7 +1946,7 @@ fn require_spine_bound(dir: &Path) -> Result<()> {
         .collect();
     if !missing.is_empty() {
         bail!(
-            "required spine slots unbound: {} — add takes/<slot>.mov",
+            "required spine slots unbound: {} — bind ranges in composition.json or add takes/<slot>.mov",
             missing.join(", ")
         );
     }
@@ -1444,6 +2015,220 @@ fn is_take_file(path: &Path) -> bool {
         .and_then(|ext| ext.to_str())
         .map(|ext| TAKE_EXTS.contains(&ext.to_ascii_lowercase().as_str()))
         .unwrap_or(false)
+}
+
+fn dest_probe(from: &Path) -> Result<(FrameRate, Option<(u32, u32)>)> {
+    let authored = composition::dest_wh(from)?;
+    let (rate, probed) = if let Some(drafts) = composition::slot_drafts(from)? {
+        dest_from_drafts(&drafts)?
+    } else {
+        dest_from_takes(&discover_takes(from).unwrap_or_default())?
+    };
+    Ok((rate, authored.or(probed)))
+}
+
+fn dest_from_drafts(drafts: &[composition::SlotDraft]) -> Result<(FrameRate, Option<(u32, u32)>)> {
+    for draft in drafts {
+        if let Ok(probe) = graft_compile::probe_path(&draft.file) {
+            if probe.width > 0 && probe.height > 0 {
+                let rate = FrameRate::from_f64(probe.fps).unwrap_or_else(|_| FrameRate::new(30, 1));
+                return Ok((rate, Some((probe.width, probe.height))));
+            }
+        }
+    }
+    Ok((FrameRate::new(30, 1), None))
+}
+
+fn draft_source_duration_s(draft: &composition::SlotDraft) -> Result<f64> {
+    if let Some(out) = draft.out_s {
+        return Ok((out - draft.in_s).max(1.0 / 30.0));
+    }
+    if let Ok(probe) = graft_compile::probe_path(&draft.file) {
+        return Ok((probe.duration_s - draft.in_s).max(1.0 / 30.0));
+    }
+    Ok(3.0)
+}
+
+fn slots_from_drafts(drafts: &[composition::SlotDraft], rate: FrameRate) -> Result<Vec<Slot>> {
+    let mut cursor = 0_i64;
+    let mut spine = Vec::new();
+    let mut overlays = Vec::new();
+    for draft in drafts {
+        let src = draft_source_duration_s(draft)?;
+        let dest_s = draft
+            .dest_duration_s
+            .unwrap_or(src / draft.speed.unwrap_or(1.0));
+        let duration = rate.frames_from_seconds(dest_s)?.max(1) as u64;
+        if draft.role.is_spine() {
+            let range = FrameRange::new(cursor, duration);
+            cursor += duration as i64;
+            let window = if draft.role == graft_score::Role::Hook {
+                Some(hook_window(rate, range))
+            } else {
+                None
+            };
+            spine.push(Slot {
+                id: draft.id.clone(),
+                role: draft.role,
+                range,
+                optional: draft.optional,
+                window,
+            });
+        } else {
+            overlays.push((draft, duration));
+        }
+    }
+    if cursor <= 0 {
+        cursor = rate.frames_from_seconds(3.0)?.max(1);
+    }
+    let full = FrameRange::new(0, cursor as u64);
+    let mut slots = spine;
+    for (draft, duration) in overlays {
+        let range = if let Some(start_s) = draft.dest_start_s {
+            let start = rate.frames_from_seconds(start_s)?.max(0);
+            FrameRange::new(start, duration)
+        } else {
+            full
+        };
+        slots.push(Slot {
+            id: draft.id.clone(),
+            role: draft.role,
+            range,
+            optional: draft.optional,
+            window: None,
+        });
+    }
+    if slots.is_empty() {
+        bail!("composition.json slots produced no score slots");
+    }
+    Ok(slots)
+}
+
+fn add_missing_slots_from_drafts(dir: &Path, drafts: &[composition::SlotDraft]) -> Result<()> {
+    let path = paths::score(dir);
+    let mut score = load_score(&path)?;
+    let rate = score.clock.rate;
+    let existing: Vec<String> = score.slots.iter().map(|s| s.id.clone()).collect();
+    let added = slots_from_drafts(drafts, rate)?
+        .into_iter()
+        .filter(|slot| !existing.iter().any(|id| id == &slot.id))
+        .collect::<Vec<_>>();
+    if added.is_empty() {
+        return Ok(());
+    }
+    let mut cursor = score.clock.duration_frames as i64;
+    for mut slot in added {
+        if slot.role.is_spine() {
+            let duration = slot.range.duration;
+            slot.range = FrameRange::new(cursor, duration);
+            if slot.role == graft_score::Role::Hook {
+                slot.window = Some(hook_window(rate, FrameRange::new(cursor, duration)));
+            }
+            cursor += duration as i64;
+        } else {
+            slot.range = FrameRange::new(0, cursor.max(1) as u64);
+        }
+        score.slots.push(slot);
+    }
+    score.recompute_duration();
+    score.validate()?;
+    save_json(&path, &score)?;
+    eprintln!("wrote {}", path.display());
+    Ok(())
+}
+
+fn bind_drafts(dir: &Path, drafts: &[composition::SlotDraft]) -> Result<()> {
+    let scion = selected_scion_id(dir, None)?;
+    bind_drafts_onto(dir, drafts, &scion)
+}
+
+fn bind_drafts_onto(dir: &Path, drafts: &[composition::SlotDraft], scion: &str) -> Result<()> {
+    let score = load_score_for(dir, scion)?;
+    for draft in drafts {
+        if score.slot(&draft.id).is_none() {
+            continue;
+        }
+        if let Some(ref nest_id) = draft.nested {
+            bind_nested_slot(dir, &draft.id, nest_id, scion, draft.speed)?;
+            continue;
+        }
+        let out = draft
+            .out_s
+            .unwrap_or(draft.in_s + draft_source_duration_s(draft)?);
+        let audio_spec = draft.audio_out_s.or(draft.audio_in_s).map(|_| BindAudio {
+            in_s: draft.audio_in_s.unwrap_or(draft.in_s),
+            out_s: draft.audio_out_s.unwrap_or(out),
+            place_start_s: draft.audio_place_s,
+            place_duration_s: draft.audio_place_duration_s,
+        });
+        let overlay_spec = if draft.x.is_some()
+            || draft.y.is_some()
+            || draft.opacity.is_some()
+            || draft.motion.is_some()
+            || !draft.remap.is_empty()
+        {
+            Some(BindOverlay {
+                x: draft.x.clone(),
+                y: draft.y.clone(),
+                opacity: draft.opacity,
+                motion: draft.motion.clone(),
+                remap: draft.remap.clone(),
+            })
+        } else {
+            None
+        };
+        bind(
+            dir,
+            draft.id.clone(),
+            draft.file.to_string_lossy().into_owned(),
+            Some(draft.in_s),
+            Some(out),
+            draft.speed,
+            Some(scion.to_string()),
+            "base".into(),
+            audio_spec,
+            overlay_spec,
+        )?;
+    }
+    Ok(())
+}
+
+fn bind_nested_slot(
+    dir: &Path,
+    slot: &str,
+    nest_id: &str,
+    scion_id: &str,
+    speed: Option<f64>,
+) -> Result<()> {
+    let nest_score = load_score(&paths::nest_score(dir, nest_id))?;
+    let path = paths::scion(dir, scion_id);
+    let mut scion = load_scion(&path)?;
+    let end = nest_score
+        .clock
+        .rate
+        .seconds_from_frames(nest_score.clock.duration_frames as i64)
+        .max(1.0 / 30.0);
+    let source = TimedRange::from_seconds(nest_score.clock.rate, 0.0, end)?;
+    let params = speed.map(|value| serde_json::json!({ "speed": value }));
+    scion.ensure_layer(Layer::Base).bindings.insert(
+        slot.into(),
+        Binding {
+            material: composition::nested_placeholder_material(),
+            source,
+            params,
+            audio: None,
+            nested: Some(nest_id.into()),
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
+        },
+    );
+    scion.validate()?;
+    save_json(&path, &scion)?;
+    eprintln!("wrote {}", path.display());
+    Ok(())
 }
 
 fn dest_from_takes(takes: &[DiscoveredTake]) -> Result<(FrameRate, Option<(u32, u32)>)> {
@@ -1559,11 +2344,24 @@ fn ledger_from_plan(
             })
         })
         .collect();
+    let nodes: Vec<serde_json::Value> = plan
+        .nodes
+        .iter()
+        .map(|node| {
+            serde_json::json!({
+                "id": node.id,
+                "cache": node.cache,
+                "blob": node.blob
+            })
+        })
+        .collect();
     serde_json::json!({
         "scion": scion,
         "dirty": dirty,
         "kerfs": kerfs,
+        "nodes": nodes,
         "clean": clean,
+        "deliver": plan.concat_cache,
         "encode_ms": encode_ms,
         "encoded": encoded,
         "out": build.output,
@@ -1589,6 +2387,16 @@ fn print_ledger_table(ledger: &serde_json::Value) {
                 eprintln!("kerf   {left}→{right}");
             }
         }
+    }
+    if let Some(nodes) = ledger["nodes"].as_array() {
+        for node in nodes {
+            let id = node["id"].as_str().unwrap_or("?");
+            let cache = node["cache"].as_str().unwrap_or("?");
+            eprintln!("node   {id}  {cache}");
+        }
+    }
+    if let Some(deliver) = ledger["deliver"].as_str() {
+        eprintln!("deliver {deliver}");
     }
     if let Some(clean) = ledger["clean"].as_array() {
         for slot in clean {

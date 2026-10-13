@@ -16,6 +16,7 @@ pub enum Kind {
     Captions,
     AudioMix,
     OverlayMix,
+    Node,
 }
 
 impl Kind {
@@ -29,6 +30,7 @@ impl Kind {
             Self::Captions => "captions",
             Self::AudioMix => "audio_mix",
             Self::OverlayMix => "overlay_mix",
+            Self::Node => "node",
         }
     }
 
@@ -42,6 +44,7 @@ impl Kind {
             "captions" => Ok(Self::Captions),
             "audio_mix" => Ok(Self::AudioMix),
             "overlay_mix" => Ok(Self::OverlayMix),
+            "node" => Ok(Self::Node),
             other => Err(Error::invalid(format!("unknown blob kind {other:?}"))),
         }
     }

@@ -38,6 +38,10 @@
     "joins": {
       "type": "array",
       "items": { "$ref": "#/$defs/join" }
+    },
+    "markers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/marker" }
     }
   },
   "$defs": {
@@ -59,6 +63,15 @@
         "duration": { "type": "integer", "minimum": 1 }
       }
     },
+    "marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "range"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "range": { "$ref": "#/$defs/range" }
+      }
+    },
     "join": {
       "type": "object",
       "additionalProperties": false,
@@ -66,7 +79,7 @@
       "properties": {
         "left": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "right": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "transition": { "enum": ["cut", "fade"] },
+        "transition": { "type": "string", "minLength": 1 },
         "duration_frames": { "type": "integer", "minimum": 0 }
       }
     },
@@ -76,7 +89,7 @@
       "required": ["id", "role", "range"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "role": { "enum": ["hook", "body", "proof", "cta", "vo", "captions", "bed", "brand"] },
+        "role": { "enum": ["hook", "body", "proof", "cta", "vo", "captions", "bed", "brand", "overlay", "sfx"] },
         "range": { "$ref": "#/$defs/range" },
         "optional": { "type": "boolean", "default": false },
         "window": {

@@ -1,0 +1,39 @@
+---
+description: Do not spray or retrigger foreign distro packaging PRs. Applies every session.
+alwaysApply: true
+---
+
+# Distro packaging PRs — do not spam
+
+`techievena` already filed a burst of graft packaging PRs on 2026-09-17.
+Several were closed as premature, not-notable, or wrong process. Maintainers
+notice volume, duplicate PRs, Cursor trailers, and CI retriggers more than
+they notice a missing Signed-off-by.
+
+This session does **not** open, push, force-push, rebase, comment on, reopen,
+or close a packaging PR against a foreign distro unless the user names that
+exact repository in this session.
+
+## Never
+
+- Open a second PR for the same package (`openwrt/packages` #30552 then #30553).
+- Force-push a distro PR branch except when **that repo's bot, on that same
+  PR**, says to amend and `git push --force-with-lease` — then do it **on
+  that PR**, once. Do not open a replacement PR.
+- Push a follow-up commit that retriggers Homebrew bottles, nixpkgs ofborg,
+  or OpenWrt multi-arch builds unless a maintainer asked for that exact fix.
+- Comment on a closed PR. Do not argue notability, nascency, or process.
+- File SlackBuilds **GitHub** PRs for new packages (use slackbuilds.org/submit).
+- File Solus PRs without their package-request issue first.
+- File brew-core until github.com/eonik-ai/graft meets Homebrew notability.
+- File GitHub PRs against `gentoo/guru` (mail / Codeberg).
+- Put `Made with Cursor`, `Co-authored-by: Cursor`, pkg.bot, or GTM copy in
+  a distro PR body or commit.
+
+## If a maintainer already objected
+
+Stop. Leave Void #62574, Homebrew #311719, SlackBuilds #17783 closed.
+Do not "fix" MacPorts #34726, Solus #10718, or OpenWrt #30553 unless the
+user explicitly asks to close or reply on that URL.
+
+nixpkgs #564184 and FreeBSD #624: wait. No pings, no extra commits.

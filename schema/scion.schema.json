@@ -30,12 +30,67 @@
       }
     },
     "dest": { "$ref": "#/$defs/dest" },
+    "graph": { "$ref": "#/$defs/graph" },
     "layers": {
       "type": "array",
       "items": { "$ref": "#/$defs/layer" }
     }
   },
   "$defs": {
+    "working": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pix_fmt", "color"],
+      "properties": {
+        "pix_fmt": { "type": "string", "minLength": 1 },
+        "color": { "type": "string", "minLength": 1 },
+        "primaries": { "type": "string", "minLength": 1 },
+        "trc": { "type": "string", "minLength": 1 }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "mode": { "enum": ["append", "replace"], "default": "append" },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graphNode" }
+        }
+      }
+    },
+    "graphNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "op"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z#][A-Za-z0-9_#]*$" },
+        "op": { "type": "string", "minLength": 1 },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "material": { "$ref": "#/$defs/material" },
+        "source": { "$ref": "#/$defs/timedRange" },
+        "place": { "$ref": "#/$defs/range" },
+        "enable": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "params": { "type": "object" },
+        "keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/keyframe" }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graphNode" }
+        }
+      }
+    },
     "rate": {
       "type": "object",
       "additionalProperties": false,
@@ -73,7 +128,29 @@
       "required": ["material", "source"],
       "properties": {
         "material": { "$ref": "#/$defs/material" },
-        "source": { "$ref": "#/$defs/timedRange" }
+        "source": { "$ref": "#/$defs/timedRange" },
+        "place": { "$ref": "#/$defs/range" }
+      }
+    },
+    "keyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "v"],
+      "properties": {
+        "t": { "type": "number", "minimum": 0 },
+        "v": { "type": "number" },
+        "ease": {
+          "enum": ["hold", "linear", "ease_in", "ease_out", "ease_in_out"]
+        }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "array", "items": { "$ref": "#/$defs/keyframe" } },
+        "y": { "type": "array", "items": { "$ref": "#/$defs/keyframe" } },
+        "opacity": { "type": "array", "items": { "$ref": "#/$defs/keyframe" } }
       }
     },
     "binding": {
@@ -84,7 +161,16 @@
         "material": { "$ref": "#/$defs/material" },
         "source": { "$ref": "#/$defs/timedRange" },
         "params": { "type": "object", "additionalProperties": true },
-        "audio": { "$ref": "#/$defs/audioBinding" }
+        "audio": { "$ref": "#/$defs/audioBinding" },
+        "nested": { "type": "string", "minLength": 1 },
+        "x": { "type": "string", "minLength": 1 },
+        "y": { "type": "string", "minLength": 1 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "motion": { "$ref": "#/$defs/motion" },
+        "remap": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/keyframe" }
+        }
       }
     },
     "layer": {
@@ -110,6 +196,7 @@
         "rate": { "$ref": "#/$defs/rate" },
         "pix_fmt": { "type": "string", "minLength": 1 },
         "color": { "type": "string", "minLength": 1 },
+        "working": { "$ref": "#/$defs/working" },
         "encoder": { "$ref": "#/$defs/encoder" }
       }
     },

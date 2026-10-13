@@ -6,7 +6,7 @@ CATEGORIES =	multimedia
 
 HOMEPAGE =	https://github.com/eonik-ai/graft
 
-MAINTAINER =	eonik <connect@eonik.ai>
+MAINTAINER =	Abinash Senapati <abinashsena@gmail.com>
 
 # Apache 2.0
 PERMIT_PACKAGE =	Yes

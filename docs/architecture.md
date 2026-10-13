@@ -1,8 +1,7 @@
 # Architecture
 
-graft is a local-first composition workspace. Its typed composition graph and
-incremental compiler are the build subsystem, not the complete product. It is
-not a video VCS: Git owns recipe history.
+graft is a compiler and recipe IR for versioning ads. Hosts embed the crates;
+the CLI is a reference host. It is not a video VCS: Git owns recipe history.
 
 This page is the map. New work follows it. If code and this page disagree,
 fix the code or file an RFC — do not invent a parallel layout.
@@ -30,19 +29,20 @@ and [history.md](history.md) for the founding-loop walk (Git vs parent vs
 
 ## What a video is
 
-A video in graft is not “hook + body + cta” as the whole film. It is:
+A video is a **timestamped filtergraph**: pads, filters, PTS, then a
+delivery encode. Roles (`hook` `body` …) label dest-time spans. They are
+not the film. Layers `base`/`copy`/`grade`/`legal` are binding opinions,
+not pixel ops. `9x16` is a dest. The living inventory — LUT, overlap
+transitions, SFX, working depth, codecs, and the rest — is
+[composition.md](composition.md). ADR 0010.
 
-- one **score clock** (rational frames, not microseconds)
-- **addressable slots** with roles (`hook` `body` `proof` `cta` `vo`
-  `captions` `bed` `brand`) that may overlap in dest time
-- **scions** whose parentage is variant derivation, not Git history
-- **layers** (`base` / `copy` / `grade` / `legal`) as binding opinions
-- a **time map** on an exact shipped build: dest frames → slot id
+The ffmpeg path compiles a working-depth graph (normalized sources,
+overlap joins, optional `scion.graph` nodes) and encodes delivery once.
+`graft-intra` still splices frames. Do not describe bitstream-copy of
+H.264 cells as the default product.
 
-Spine slots are sequential on the clock. Overlay slots (`vo`, `captions`,
-`bed`, `brand`) share dest time with the spine. `9x16` is a dest, not a
-slot. graft does not infer this breakdown from pixels, detect silence in
-the mp4, or guess a replacement clip.
+graft does not infer slots from pixels, detect silence in the mp4, or
+guess a replacement clip.
 
 | Command | In | Out |
 | --- | --- | --- |
@@ -244,7 +244,7 @@ Mirrors `schema/`. Do not add a field here that is not in the schema.
 
 | Module | Job |
 | --- | --- |
-| `Kind` | `material` \| `slot_encode` \| `audio_encode` \| `kerf` \| `concat` \| `captions` \| `audio_mix` \| `overlay_mix` |
+| `Kind` | `material` \| `slot_encode` \| `audio_encode` \| `kerf` \| `concat` \| `captions` \| `audio_mix` \| `overlay_mix` \| `node` |
 | `BlobId` | BLAKE3 of bytes (`blake3:<hex>`) |
 | `ActionKey` | BLAKE3 of canonical action JSON (hex) |
 | `Store` | namespaced `put_blob` / `get_blob` + `get_action` / `put_action` |
@@ -263,27 +263,23 @@ Local store lives at `<project>/.graft` and is gitignored.
 | `flatten` | layer strength → one binding per slot |
 | `graph` | lower Score + Scion to the action DAG |
 | `schedule` | hits/misses from the action cache |
-| `keys` | `slot_encode` / `audio_encode` / `kerf` / `captions` / `audio_mix` / `overlay_mix` / `scion_hash` → `ActionKey` |
+| `keys` | working source / spine / node / `deliver` (encoder only on the sink) |
 | `grain` | frame vs GOP; whether a kerf is a no-op |
 | `encode` | `EncodeBackend` against `Action` + bytes |
 | `concat` | `ConcatBackend`; concat is a linker product |
 | `intra` | `FrameIntra`: copy `[in, out)` frames; kerf no-op; splice concat |
-| `ffmpeg` | `FfmpegX264`: system ffmpeg/libx264; closed-GOP slot files; concat `-c copy` |
+| `working` | FFV1 / PCM nodes, xfade, LUT, mix, one delivery encode |
+| `ffmpeg` | `FfmpegX264`: working graph + libx264 sink (intra stays splice) |
 | `pipeline` | `compile()`: lower, schedule, encode misses |
 | `signal` | platform metric → dirty slots + kerfs |
 | `plan` | JSON view of a schedule |
 
 `graft-intra` is the first row of the grain table (image-seq / All-I).
-Long-GOP uses the same graph: `FfmpegX264` shells out to system ffmpeg
-(Apache-2.0 graft does not link GPL x264). Slot encodes are closed-GOP
-(IDR at the start of each slot file). Concat bitstream-copies them.
-Kerf is an empty node at an IDR join; a non-IDR join or a named fade
-fills that node. Arbitrary-source mid-GOP repair remains later.
-
-The compiler is sequential. The ffmpeg path caches synchronized AAC
-independently and muxes it after a verified video link. Named fade
-kerfs fill the same kerf node; closed-GOP `cut` stays empty at an IDR
-join. `vo`/`bed`/`captions`/`brand` are sibling mix/sidecar actions.
+The ffmpeg path shells out to system ffmpeg (Apache-2.0 graft does not
+link GPL x264). Sources normalize to working depth (`yuv422p10le` ProRes HQ +
+PCM). Joins are `concat` or `xfade` / `acrossfade`. Delivery `libx264`
++ AAC runs once at the sink. `concat -c copy` of H.264 cells is not
+the default. `vo`/`bed`/`sfx`/`captions`/`brand` are overlay pads.
 `ActionResult` records blob, size, metadata, and provenance.
 Arbitrary-source mid-GOP repair remains later.
 

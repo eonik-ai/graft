@@ -2,28 +2,37 @@
 
 Instructions for humans and coding agents working in this repository.
 
-graft is a local-first composition workspace whose incremental compiler is a
-subsystem. Git owns recipe history; graft owns scions, layers, semantic
-diff/conflicts, build provenance, signal resolution, and compile lowering. The
-north star is [docs/mission.md](docs/mission.md). Non-negotiables are
-[docs/principles.md](docs/principles.md). Read both before any edit.
+graft is a compiler and recipe IR for versioning ads. Hosts embed it; the
+CLI is a reference host, not the product. Git owns recipe history; graft owns
+scions, layers, semantic diff/conflicts, build provenance, signal resolution,
+and compile lowering. The north star is [docs/mission.md](docs/mission.md).
+Non-negotiables are [docs/principles.md](docs/principles.md). The
+composition inventory is [docs/composition.md](docs/composition.md) —
+read it before any schema, compile, adapter, or host-embed work, without
+the user restating LUT / transitions / codecs / SFX. Principle 15 is
+standing: public pages are the product, not a GTM tracker. Principle 16:
+ffmpeg is the lowerer; do not invent a compositor. Do not spray,
+duplicate, or retrigger foreign distro packaging PRs
+(`.cursor/rules/16-distro-prs.mdc`).
 
 The project name and CLI are **`graft`**, lowercase, like `git`. Do not
 rename it Graft in prose, headings, or code.
 
 ## What this repo is
 
-The current implementation is a local-first workspace: tracked multi-scion
-documents, layer flattening, semantic diff/merge, build provenance,
-declared-window feedback, a sequential compiler with synchronized audio on
-the ffmpeg path, a scoped OTIO adapter, local preview, object-store
-transport, and porcelain (`ship` / `swap` / `address`) that closes the user
-loop on that IR. Do not claim lossless NLE round-trips, remote execution, DAM,
-review UI, or a published crates.io release. Do not import eonik GTM, lead
-lists, or "replace the editor" copy. First compiler GitHub tag is `v0.2.0`
-(not spec `v0.1.0`). crates.io crate name `graft` is taken (orbitinghail
-storage engine). This workspace stays `publish = false`. Do not claim
-distro packages exist because a recipe file is in `dist/`.
+The current implementation is that IR plus a sequential compiler: tracked
+multi-scion documents, layer flattening, semantic diff/merge, build
+provenance, declared-window feedback, a working-depth ffmpeg graph
+(normalized sources, overlap joins, optional `scion.graph`, one delivery
+encode), a scoped OTIO guest, local preview, object-store transport, and
+a reference CLI (`ship` / `swap` / `address`). No app host — including
+eonik — compiles through the crates yet. Do not claim lossless NLE round-trips, remote
+execution, DAM, review UI, or a published crates.io release. Do not import
+eonik GTM, lead lists, pkg.bot, living submission boards, or "replace the
+editor" copy (principle 15). First compiler GitHub tag is `v0.2.0` (not spec
+`v0.1.0`). crates.io crate name `graft` is taken (orbitinghail storage
+engine). This workspace stays `publish = false`. Do not claim distro
+packages exist because a recipe file is in `dist/`.
 
 ## Build and test
 
@@ -55,6 +64,7 @@ on score, never the reverse. `ref/` must not import adapter code.
 | Change | Directory |
 | --- | --- |
 | Object, field, enum on the IR | `schema/*.schema.json` + `docs/schema.md` |
+| New composition dimension (LUT, xfade, SFX, …) | append [docs/composition.md](docs/composition.md); RFC + schema if the compiler claims it |
 | Signal addressing, spill, hook window | `ref/graft_ref/signal.py` + `docs/time-map.md` + example `dirty.json` |
 | Cache / kerf / grain | `docs/compile.md` + `crates/graft-compile` |
 | Irreversible decision | new `docs/adr/NNNN-….md` — never edit an accepted ADR's decision section |
@@ -85,17 +95,21 @@ on score, never the reverse. `ref/` must not import adapter code.
 | dirty-set rule | `docs/time-map.md`, `examples/**/dirty.json` |
 | cache key | `docs/compile.md` |
 | a principle | this file, in one sentence if the agent-routing changes |
+| a composition family | [docs/composition.md](docs/composition.md) Changelog |
 | intended CLI | `README.md` only — do not invent flags in random docs |
 
 ## Invariants (fail the PR)
 
-- Three delta layers stay distinct: recipe (git), essence (CAS), build (encode cache).
+- Three delta layers stay distinct: recipe (git), essence (CAS), build (action cache of **nodes**, not delivery GOP cells as the only unit).
+- Composition is a timestamped filtergraph. ffmpeg is the lowerer. Working depth ≠ delivery. See composition.md.
 - Git owns recipe history; graft owns composition semantics. Scion inheritance is not commit history.
 - 9:16 is a **dest**, not a slot.
 - The shipped mp4 is never hashed as essence.
 - Adapters are lossy guests. No "lossless CapCut/Premiere/Resolve" claims.
 - Device-first: preview is decode+composite; server is the same compiler.
 - Do not propose rsync/xdelta on re-exported H.264 as the delta system.
+- Public README, install, packaging, changelog, and release notes do not
+  carry GTM, pkg.bot, or living submission-board copy (principle 15).
 
 ## License
 

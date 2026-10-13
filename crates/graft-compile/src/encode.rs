@@ -13,6 +13,12 @@ pub trait EncodeBackend {
         false
     }
 
+    /// Working-depth graph + one delivery encode (ffmpeg). Intra stays on the
+    /// slot/kerf/concat splice path.
+    fn working_graph(&self) -> bool {
+        false
+    }
+
     fn grain(&self, dest: &Dest) -> Grain {
         Grain::from_dest(dest)
     }

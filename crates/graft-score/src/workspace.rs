@@ -28,6 +28,9 @@ pub fn resolve_scion(scions: &BTreeMap<String, Scion>, id: &str) -> Result<Scion
             }
             parent.id = child.id.clone();
             parent.dest = child.dest.clone();
+            if child.graph.is_some() {
+                parent.graph = child.graph.clone();
+            }
             parent
         } else {
             child.clone()
@@ -87,7 +90,15 @@ pub fn semantic_diff(score: &Score, left: &Scion, right: &Scion) -> Result<Vec<S
             path: "dest".into(),
             before: serde_json::to_value(&left.dest).map_err(|e| Error::invalid(e.to_string()))?,
             after: serde_json::to_value(&right.dest).map_err(|e| Error::invalid(e.to_string()))?,
-            cache: "all slot encodes and joins miss".into(),
+            cache: "working sources stay; delivery misses if encoder changed".into(),
+        });
+    }
+    if left.graph != right.graph {
+        changes.push(SemanticChange {
+            path: "graph".into(),
+            before: serde_json::to_value(&left.graph).map_err(|e| Error::invalid(e.to_string()))?,
+            after: serde_json::to_value(&right.graph).map_err(|e| Error::invalid(e.to_string()))?,
+            cache: "graph nodes and delivery miss; working sources stay".into(),
         });
     }
     let ids: BTreeSet<String> = left_bindings
@@ -137,6 +148,13 @@ pub fn merge_scions(
     let t = effective_bindings(score, theirs)?;
     let mut conflicts = Vec::new();
     let dest = merge_value("dest", &base.dest, &ours.dest, &theirs.dest, &mut conflicts)?;
+    let graph = merge_optional(
+        "graph",
+        base.graph.as_ref(),
+        ours.graph.as_ref(),
+        theirs.graph.as_ref(),
+        &mut conflicts,
+    )?;
     let ids: BTreeSet<String> = b.keys().chain(o.keys()).chain(t.keys()).cloned().collect();
     let mut bindings = BTreeMap::new();
     for slot in ids {
@@ -164,6 +182,7 @@ pub fn merge_scions(
             parent: None,
             change_request: None,
             dest,
+            graph,
             layers: vec![BindingLayer {
                 name: Layer::Base,
                 bindings,
@@ -231,6 +250,9 @@ where
 
 pub fn validate_family(score: &Score, scions: &BTreeMap<String, Scion>) -> Result<()> {
     for scion in scions.values() {
+        if scion.concept != score.concept {
+            continue;
+        }
         scion.validate_against_score(score)?;
         let resolved = resolve_scion(scions, &scion.id)?;
         let _ = effective_bindings(score, &resolved);
@@ -238,11 +260,26 @@ pub fn validate_family(score: &Score, scions: &BTreeMap<String, Scion>) -> Resul
     Ok(())
 }
 
+pub fn scion_has_nested(scion: &Scion) -> bool {
+    scion.layers.iter().any(|layer| {
+        layer
+            .bindings
+            .values()
+            .any(|binding| binding.nested_id().is_some())
+    }) || scion.graph.as_ref().is_some_and(|graph| {
+        graph
+            .nodes
+            .iter()
+            .any(|node| crate::nested_scion_id(node).is_some())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        Binding, Dest, Encoder, FrameRange, FrameRate, Role, Slot, TimedRange, Window, GRAFT_SCHEMA,
+        Binding, CompositionGraph, Dest, Encoder, FrameRange, FrameRate, GraphMode, GraphNode,
+        Role, Slot, TimedRange, Window, GRAFT_SCHEMA,
     };
     use crate::{Clock, Score};
 
@@ -268,6 +305,7 @@ mod tests {
             dest_default: Some("9x16".into()),
             spill_threshold_frames: 11,
             joins: Vec::new(),
+            markers: Vec::new(),
         }
     }
 
@@ -279,6 +317,7 @@ mod tests {
             rate: FrameRate::new(30, 1),
             pix_fmt: "yuv420p".into(),
             color: "bt709".into(),
+            working: None,
             encoder: Encoder::graft_intra(),
         }
     }
@@ -292,6 +331,35 @@ mod tests {
             },
             params: None,
             audio: None,
+            nested: None,
+            x: None,
+            y: None,
+            opacity: None,
+            motion: None,
+            remap: Vec::new(),
+        }
+    }
+
+    fn look_graph() -> CompositionGraph {
+        CompositionGraph {
+            mode: GraphMode::Append,
+            nodes: vec![GraphNode {
+                id: "look".into(),
+                op: "lut3d".into(),
+                inputs: vec!["#picture".into()],
+                material: Some(
+                    "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .into(),
+                ),
+                source: None,
+                place: None,
+                enable: None,
+                role: Some("look".into()),
+                params: None,
+
+                keys: None,
+                nodes: Vec::new(),
+            }],
         }
     }
 
@@ -303,6 +371,7 @@ mod tests {
             parent: parent.map(str::to_string),
             change_request: None,
             dest: dest(),
+            graph: None,
             layers: vec![BindingLayer {
                 name: layer,
                 bindings: BTreeMap::from([("hook".into(), binding)]),
@@ -322,6 +391,31 @@ mod tests {
             bindings["hook"].material,
             "blake3:0000000000000000000000000000000000000000000000000000000000000002"
         );
+    }
+
+    #[test]
+    fn child_inherits_parent_graph_until_it_overrides() {
+        let mut parent = scion("root", None, Layer::Base, bind(1));
+        parent.graph = Some(look_graph());
+        let child = scion("child", Some("root"), Layer::Legal, bind(2));
+        let family = BTreeMap::from([
+            (parent.id.clone(), parent.clone()),
+            (child.id.clone(), child),
+        ]);
+        let resolved = resolve_scion(&family, "child").unwrap();
+        assert_eq!(resolved.graph, parent.graph);
+
+        let mut override_child = scion("override", Some("root"), Layer::Legal, bind(2));
+        override_child.graph = Some(CompositionGraph {
+            mode: GraphMode::Append,
+            nodes: Vec::new(),
+        });
+        let family = BTreeMap::from([
+            (parent.id.clone(), parent),
+            (override_child.id.clone(), override_child),
+        ]);
+        let resolved = resolve_scion(&family, "override").unwrap();
+        assert_eq!(resolved.graph.as_ref().unwrap().nodes.len(), 0);
     }
 
     #[test]

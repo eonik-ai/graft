@@ -3,7 +3,24 @@
 The compiler turns a scion into a dest file. It is incremental.
 
 The compile IR is an **action graph**. Dirty is “does this action key
-have an artifact?”, not “diff two scion JSON files.” See ADR 0006.
+have an artifact?”, not “diff two scion JSON files.” See ADR 0006 and
+RFC 0003.
+
+The default ffmpeg path is a **working-depth graph** plus one delivery
+encode (ADR 0010, [composition.md](composition.md)). Sources normalize
+to `dest.working` (default `yuv422p10le` + dest color, range `tv`,
+ProRes HQ) and PCM 48 kHz stereo. Joins are decoded `concat` or overlap `xfade` /
+`acrossfade`. `binding.nested` / graph `nested` compile an inner scion
+to its working `#picture` (action-cached; never the delivery concat)
+and bind that pad on the parent. `scion.graph` nodes append after `#picture` / `#audio`,
+or replace the synthesized spine. A `group` is expanded first: children
+inherit `enable=` and each child is its own action. Filter-shaped ops
+this ffmpeg has lower generically; a missing filter is `toolchain`
+(RFC 0010). The node key includes `keys` when set. Delivery (`dest.pix_fmt` + encoder)
+runs once at the sink.
+
+`graft-intra` stays a frame splice. `concat -c copy` of H.264 cells is
+a special case only when no downstream filter exists — not this path.
 
 ## Two hashes
 
@@ -13,63 +30,92 @@ scale (milliseconds — 3 decimal places — unless an RFC says otherwise).
 
 | Type | What is hashed | Display |
 | --- | --- | --- |
-| `ActionKey` | canonical JSON below (`slot_encode`, `kerf`, `scion_hash`) | 64 hex |
-| `BlobId` | **bytes** of a material, slot_encode file, or kerf file | `blake3:<hex>` |
+| `ActionKey` | canonical JSON below | 64 hex |
+| `BlobId` | **bytes** of a material or working/delivery blob | `blake3:<hex>` |
 
 Do not use one string for both. Mixing them is how “git for video” fails.
 
-Concat output is a linker product. Store it as kind `concat` if at all.
-**Never** hash the shipped file as essence.
+Delivery output is kind `concat`. **Never** hash the shipped file as
+essence.
 
 ## Action keys
 
-### slot_encode
+Working keys include dest size, rate, and working depth. They do
+**not** include the delivery encoder.
+
+### working_source
 
 ```
-slot_encode := H(
-  slot.id | slot.role | material.hash | source | audio | params | dest | encoder
+working_source := H(
+  slot.id | slot.role | material.hash | source | audio | params | working
 )
 ```
 
-`dest` = `{width, height, rate, pix_fmt, color}`.
+`working` = `{width, height, rate, working_pix_fmt, working_color, working_range}`.
+The source node trims `[in, out)`, scales, `fps`, `format`, and
+`setparams` so mixed geometry and untagged color can join.
 
-`encoder` includes impl, version, profile, level, rate_control, preset,
-keyint, `sc_threshold`, and toolchain (ffmpeg/libx264 digest, threads,
-closed-GOP contract). Slot id is part of the key so distinct semantic
-slots cannot share an action identity.
+### audio_encode
 
-`sc_threshold` is **0** and `keyint` is **fixed** so GOP layout is
-deterministic across machines.
+Working PCM (`pcm_s24le`, 48 kHz, stereo). Same working fingerprint.
+`vo` / `bed` / `sfx` are overlay pads placed on the **compiled** dest
+clock.
 
-### kerf
+### kerf / join
 
 ```
 kerf := H(
-  left.slot_encode | right.slot_encode | transition | duration_frames | dest | encoder
+  left.working_source | right.working_source | transition | duration_frames | working
 )
 ```
 
-`transition` is `cut` or `fade` from optional `score.joins`. Missing join
-is `cut`. Fade is a sequential fade-out / fade-in of `duration_frames` on
-each side (kerf is `2 * duration_frames`). Concat trims that many frames
-from the adjacent slot encodes so dest duration still matches the score
-clock. Changing only the fade dirties that kerf and concat, not adjacent
-`slot_encode` blobs. Intra / matching `stsd` cut: kerf is a no-op splice
-(empty artifact, still a node).
+`transition` is `cut`, `fade` (xfade `fade`), or any ffmpeg `xfade`
+name. `fade` is an **overlap**. `duration_frames` is the overlap.
+Dest length shortens by each overlap; the time map records compiled
+dest ranges. Pair keys stay independent so a hook swap still hits
+body→cta in the plan. The folded working spine is a separate node.
 
-### scion hash
+### working_spine
 
 ```
-scion_hash := H( ordered slot_encode[] | audio_encode[] | kerf[] | captions[] | audio_mix | brand | dest )
+working_spine := H( ordered working_source[] | joins[] | working )
 ```
 
-`audio_encode` is independent: slot id, material, source, AAC 48kHz stereo,
-and encoder toolchain. Video-only scions omit it. `vo`/`bed` are overlay
-audio encodes mixed after spine AAC. `captions` is a sidecar. `brand` is
-an `overlay_mix` on the picture concat.
+Cut folds with the `concat` filter. Overlap folds with `xfade` and
+`acrossfade`. Changing the delivery encoder does not miss this key.
 
-The time map is a **build artifact** keyed by `scion_hash` (dest clock).
-It is not an identity derived only for the CLI.
+### working_node
+
+```
+working_node := H( op | id | input keys | extra | working )
+```
+
+`extra` is material, source, place, enable, role, params. Used for
+`scion.graph` (`lut3d`, `overlay`, `gap`, …).
+
+### deliver
+
+```
+deliver := H( picture_key | audio_key | dest | encoder )
+```
+
+`encoder` includes impl, version, profile, level, rate_control, preset,
+keyint, `sc_threshold`, and toolchain. A dest encoder change misses
+**delivery** only. Clean working sources and the working spine stay
+hits.
+
+`sc_threshold` is **0** and `keyint` is **fixed** so GOP layout of the
+sink is deterministic across machines.
+
+### captions / overlay_mix / audio_mix
+
+Sidecar captions. Brand is an `overlay` on the working picture at
+`binding.x` / `y` / `opacity` / `binding.motion` (mix key, not source key).
+`binding.remap` is on the working-source key.
+Overlay audio mixes after the spine fold.
+
+The time map is a **build artifact** keyed by the deliver action (dest
+clock, compiled ranges). It is not an identity derived only for the CLI.
 
 ## Dirty set
 
@@ -86,19 +132,25 @@ collapse it into the action cache.
 
 Schedule:
 
-1. Recompute each `slot_encode` key. Miss → encode that slot.
-2. For each adjacent pair, recompute `kerf`. Miss if the key is new
-   (either side’s `slot_encode` changed, or transition changed).
-3. Overlay: `vo`/`bed` `audio_encode`, `captions`, `audio_mix`,
-   `overlay_mix`. A caption or brand miss does not recut a clean body
-   `slot_encode`.
-4. Concat: miss if `scion_hash` is new. Copy cached slot_encode / kerf
-   blobs; encode only misses.
+1. Recompute each working-source key. Miss → normalize that range.
+2. Pair joins: miss if either side’s source key or the transition
+   changed. Body source stays a hit when only the hook changes.
+3. Working spine: miss if any source or join on the fold changed.
+4. Overlay: `vo`/`bed`/`sfx`, `captions`, brand. A caption or SFX miss
+   does not recut a clean body source.
+5. `scion.graph` nodes: miss if inputs, params, or `keys` changed.
+   A `group` expands before the key, so a child misses alone.
+   A child that omits `graph` inherits the parent nodes (same keys).
+6. Deliver: miss if the picture/audio key or the encoder changed.
+
+`graft ship` writes look/legal nodes and `score.joins` from the take
+directory. `graft preview` is this compile. The plan JSON lists `nodes[]`
+and `concat_cache` (delivery).
 
 Retiming a slot (speed ≠ 1, or span length change) invalidates that
-slot’s action key; the slot re-encodes in full. `graft-intra` resamples
+source key; the slot re-encodes in full. `graft-intra` resamples
 the sliced frame pack to the dest frame count (`source_duration / speed`).
-`FfmpegX264` applies `setpts` and chained `atempo` so picture and AAC
+`FfmpegX264` applies `setpts` and chained `atempo` so picture and PCM
 stay locked. Feedback still does not invent a speed.
 
 ## Grain
@@ -106,26 +158,19 @@ stay locked. Feedback still does not invent a speed.
 | Working format | Independent unit | Replace hook | Retime ("too slow") |
 | --- | --- | --- | --- |
 | Image seq / DPX / EXR / JPEG2000 / `graft-intra` | frame | those frames | new essence for the slot |
+| Working ProRes HQ / PCM (ffmpeg path) | node output | that source node | that source node |
 | ProRes / DNxHR / All-I | frame | grain-table intent (`stsd` splice is not implemented) | re-encode that slot |
-| H.264/HEVC/AV1 Long-GOP | GOP / IDR (~0.5–2s) | hook GOPs + kerf | full slot re-encode |
+| H.264/HEVC/AV1 Long-GOP | GOP / IDR (~0.5–2s) | hook subgraph + downstream nodes | full slot re-encode |
 | HLS / CMAF | segment aligned to GOP | replace hook segments | new segments + playlist |
 
 Intra is proven: `SlotEncode` copies `[in, out)` frames into CAS;
 kerf is empty; concat splices.
 
 Long-GOP (`impl: x264`): graft shells out to **system** ffmpeg/`libx264`
-with `keyint` = `min-keyint`, `scenecut=0`, `threads=1`. Each slot
-encode is a closed-GOP mp4 starting on IDR. Concat is `ffmpeg -c copy`
-after probing parts for size, fps, codec, pix_fmt, color, and time base.
-The hook→body kerf node still misses when the hook key changes. At a
-file-aligned closed-GOP IDR join the artifact is empty and concat is
-bitstream copy. When a slot file does not start on IDR, the same node
-encodes one GOP each side into a real kerf blob, then probes codec,
-geometry, fps, and IDR before concat. If repair cannot be proven, compile
-fails with a machine-readable `kerf_unproven` reason and does not
-silently re-encode a clean body. Synchronized AAC audio is cached
-independently, padded with silence when a spine slot lacks audio, and
-muxed after the video link; muxed audio duration must match picture.
+with `keyint` = `min-keyint`, `scenecut=0`, `threads=1`. Working nodes
+are ProRes HQ (picture) and PCM (sound). The sink is one `libx264` + AAC
+encode. A post-join LUT re-filters the joined working picture; it does
+not recode a clean body source.
 
 Do not statically link x264 into the Apache-2.0 binary.
 
@@ -136,15 +181,16 @@ Now: `hook_v3` on the same body and cta.
 
 | Piece | Cache |
 | --- | --- |
-| hook encode | MISS (new material hash → new ActionKey) |
-| body encode | HIT (same ActionKey; body BlobId unchanged) |
-| cta encode | HIT |
-| kerf hook→body | MISS (left changed) |
-| kerf body→cta | HIT |
+| hook source | MISS (new material hash → new ActionKey) |
+| body source | HIT (same ActionKey; body BlobId unchanged) |
+| cta source | HIT |
+| join hook→body | MISS (left changed) |
+| join body→cta | HIT (pair keys are the two sources) |
+| working spine | MISS (hook source changed) |
+| deliver | MISS |
 
-Concat: `hook_encode + kerf_hook_body + cached_body + cached_kerf_body_cta + cached_cta`.
-Body’s frames are bitstream-copied. The concat blob is new. The body
-blob is not.
+The body working blob is reused. Downstream nodes that take the new
+spine (LUT, mix, delivery) miss. That is “keep the body subgraph.”
 
 ## What not to build
 

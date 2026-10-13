@@ -88,6 +88,46 @@ fn write_sine(dir: &Path, name: &str, seconds: &str) -> PathBuf {
     path
 }
 
+fn probe_chapters(path: &Path) -> serde_json::Value {
+    let ffprobe = std::env::var("FFPROBE").unwrap_or_else(|_| "ffprobe".into());
+    let output = Command::new(&ffprobe)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-show_chapters",
+            "-of",
+            "json",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("ffprobe chapters");
+    serde_json::from_slice(&output.stdout).unwrap_or(serde_json::json!({}))
+}
+
+fn write_still(dir: &Path, name: &str, color: &str) -> PathBuf {
+    let ffmpeg = std::env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".into());
+    let path = dir.join(name);
+    let status = Command::new(&ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            &format!("color=c={color}:s=32x32"),
+            "-frames:v",
+            "1",
+            path.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success(), "ffmpeg still {name}");
+    path
+}
+
 fn copy_video_range(dir: &Path, src: &str, start: &str, duration: &str, dest: &str) -> Vec<u8> {
     let ffmpeg = std::env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".into());
     let path = dir.join(dest);
@@ -1624,6 +1664,25 @@ fn plan_overlay_audio<'a>(compile: &'a serde_json::Value, id: &str) -> &'a serde
         .unwrap_or_else(|| panic!("missing overlay_audio {id}"))
 }
 
+fn plan_node<'a>(compile: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+    compile["plan"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["id"] == id)
+        .unwrap_or_else(|| panic!("missing node {id}"))
+}
+
+fn write_cube(dir: &Path, name: &str, last: &str) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(
+        &path,
+        format!("LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n{last}\n"),
+    )
+    .unwrap();
+    path
+}
+
 fn diff_paths(diff: &serde_json::Value) -> Vec<String> {
     diff.as_array()
         .unwrap()
@@ -2286,7 +2345,9 @@ fn ship_fails_without_named_takes() {
     fs::create_dir_all(dir.join("takes")).unwrap();
     let err = run_fail(&dir, &["ship"]);
     assert!(
-        err.contains("no named takes") || err.contains("not a take directory"),
+        err.contains("no composition")
+            || err.contains("no named takes")
+            || err.contains("not a take directory"),
         "{err}"
     );
     let _ = fs::remove_dir_all(&dir);
@@ -2299,7 +2360,7 @@ fn address_primes_swap_on_worked_example() {
     let got = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
     assert_eq!(got["dirty_slots"], serde_json::json!(["hook"]));
     assert_eq!(got["creative_replacement"], "required");
-    assert_eq!(got["next"], "graft swap hook <file>");
+    assert_eq!(got["next"], "graft swap hook <file> [--in --src-out]");
     assert_eq!(got["scion"], "hook-next");
     assert!(dir.join("scions/hook-next.json").is_file());
     let child: serde_json::Value =
@@ -2407,7 +2468,7 @@ fn swap_hook_prints_reuse_ledger() {
     );
 
     let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
-    assert_eq!(addressed["next"], "graft swap hook <file>");
+    assert_eq!(addressed["next"], "graft swap hook <file> [--in --src-out]");
     assert_eq!(addressed["creative_replacement"], "required");
     let primed = addressed["scion"].as_str().unwrap().to_string();
     let child = load_scion_json(&dir, &primed);
@@ -2486,5 +2547,1153 @@ fn swap_hook_prints_reuse_ledger() {
         err.contains("recoded clean siblings") && err.contains("principle 14"),
         "{err}"
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_look_sfx_fade() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_look_sfx_fade — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-loop");
+    fs::create_dir_all(dir.join("takes/hooks")).unwrap();
+    write_color(&dir.join("takes"), "hook.mp4", "red", "1", "30");
+    write_color(&dir.join("takes"), "body.mp4", "green", "2", "30");
+    write_color(&dir.join("takes"), "cta.mp4", "yellow", "1", "30");
+    write_sine(&dir.join("takes"), "sfx.wav", "4");
+    write_sine(&dir.join("takes"), "vo.wav", "4");
+    write_sine(&dir.join("takes"), "bed.wav", "4");
+    write_color(&dir.join("takes/hooks"), "v2.mp4", "blue", "1", "30");
+    write_cube(&dir.join("takes"), "look.cube", "1 1 1");
+    write_cube(&dir.join("takes"), "look-v2.cube", "0.9 0.9 0.9");
+    fs::write(dir.join("takes/eq.json"), r#"{"saturation":"1.2"}"#).unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r#"{
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"fade","duration_frames":6}],
+  "nodes": [
+    {"id":"look","op":"lut3d","file":"look.cube"},
+    {"id":"eq","op":"eq","params":{"saturation":"1.05"}},
+    {"id":"duck","op":"sidechain","inputs":["bed","vo"]},
+    {"id":"loud","op":"loudnorm","params":{"I":"-14"}}
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let (shipped, ship_err) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    assert_eq!(plan_node(&shipped, "look")["cache"], "miss");
+    assert_eq!(plan_node(&shipped, "eq")["cache"], "miss");
+    assert_eq!(plan_node(&shipped, "loud")["cache"], "miss");
+    assert_eq!(plan_overlay_audio(&shipped, "sfx")["cache"], "miss");
+    assert_eq!(plan_overlay_audio(&shipped, "vo")["cache"], "miss");
+    assert_eq!(plan_overlay_audio(&shipped, "bed")["cache"], "miss");
+    assert!(
+        ship_err.contains("node   look") && ship_err.contains("dirty"),
+        "{ship_err}"
+    );
+    let score: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(score["joins"][0]["transition"], "fade");
+    assert_eq!(score["joins"][0]["duration_frames"], 6);
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    assert_eq!(root_doc["dest"]["working"]["pix_fmt"], "yuv422p10le");
+    let node_ids: Vec<&str> = root_doc["graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|node| node["id"].as_str())
+        .collect();
+    assert_eq!(node_ids, ["look", "eq", "duck", "loud"]);
+    assert_eq!(root_doc["graph"]["nodes"][0]["op"], "lut3d");
+    assert_eq!(root_doc["graph"]["nodes"][1]["op"], "eq");
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "look")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+    let look_key = plan_node(&warmed, "look")["slot_encode"].clone();
+    assert!(body_blob.is_string(), "{body_blob}");
+
+    run_ok(&dir, &["preview", "--out", "preview.mp4"]);
+    assert!(dir.join("preview.mp4").is_file());
+
+    let swapped = run_ok(
+        &dir,
+        &["swap", "hook", "takes/hooks/v2.mp4", "--out", "ad-v2.mp4"],
+    );
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&swapped, "look")["cache"], "miss");
+    let hook_child = swapped["ledger"]["scion"].as_str().unwrap().to_string();
+    let hook_raw = load_scion_json(&dir, &hook_child);
+    assert!(hook_raw.get("graph").is_none() || hook_raw["graph"].is_null());
+    let shown = run_ok(&dir, &["scion", "show", &hook_child]);
+    assert_eq!(shown["resolved"]["graph"]["nodes"][0]["id"], "look");
+
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    let primed = addressed["scion"].as_str().unwrap().to_string();
+    let primed_raw = load_scion_json(&dir, &primed);
+    assert!(primed_raw.get("graph").is_none() || primed_raw["graph"].is_null());
+    let primed_shown = run_ok(&dir, &["scion", "show", &primed]);
+    assert_eq!(primed_shown["resolved"]["graph"]["nodes"][0]["id"], "look");
+
+    let look_swap = run_ok(
+        &dir,
+        &[
+            "swap",
+            "look",
+            "takes/look-v2.cube",
+            "--scion",
+            &hook_child,
+            "--out",
+            "ad-look.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&look_swap, "hook")["cache"], "hit");
+    assert_eq!(plan_slot(&look_swap, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&look_swap, "cta")["cache"], "hit");
+    assert_eq!(plan_slot(&look_swap, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&look_swap, "look")["cache"], "miss");
+    assert_ne!(plan_node(&look_swap, "look")["slot_encode"], look_key);
+    assert!(dir.join("ad-look.mp4").is_file());
+    let look_child = look_swap["ledger"]["scion"].as_str().unwrap().to_string();
+
+    let eq_swap = run_ok(
+        &dir,
+        &[
+            "swap",
+            "eq",
+            "takes/eq.json",
+            "--scion",
+            &look_child,
+            "--out",
+            "ad-eq.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&eq_swap, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&eq_swap, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&eq_swap, "look")["cache"], "hit");
+    assert_eq!(plan_node(&eq_swap, "eq")["cache"], "miss");
+    assert!(dir.join("ad-eq.mp4").is_file());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_library_clip_ranges() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_library_clip_ranges — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-library");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_sine(&dir.join("takes"), "whoosh.wav", "1");
+    write_cube(&dir.join("takes"), "look.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/composition.json"),
+        r#"{
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"fade","duration_frames":6}],
+  "slots": [
+    {"id":"hook","file":"product.mp4","in":0,"out":1},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4},
+    {"id":"sfx","role":"sfx","file":"whoosh.wav","in":0,"out":0.4,"place":2.0}
+  ],
+  "nodes": [
+    {"id":"look","op":"lut3d","file":"look.cube"},
+    {"id":"eq","op":"eq","params":{"saturation":"1.05"}}
+  ]
+}"#,
+    )
+    .unwrap();
+    assert!(!dir.join("takes/hook.mp4").exists());
+    assert!(!dir.join("takes/body.mp4").exists());
+    assert!(!dir.join("takes/cta.mp4").exists());
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let score: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(score["slots"][0]["id"], "hook");
+    assert_eq!(score["slots"][0]["range"]["duration"], 30);
+    assert_eq!(score["slots"][1]["id"], "body");
+    assert_eq!(score["slots"][1]["range"]["start"], 30);
+    assert_eq!(score["slots"][1]["range"]["duration"], 60);
+    assert_eq!(score["slots"][2]["id"], "cta");
+    assert_eq!(score["slots"][3]["id"], "sfx");
+    assert_eq!(score["slots"][3]["range"]["start"], 60);
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    assert_eq!(root_doc["graph"]["nodes"][0]["id"], "look");
+    let hook_src = &root_doc["layers"][0]["bindings"]["hook"]["source"]["range"];
+    assert_eq!(hook_src["start"], 0);
+    assert_eq!(hook_src["duration"], 30);
+    let body_src = &root_doc["layers"][0]["bindings"]["body"]["source"]["range"];
+    assert_eq!(body_src["start"], 30);
+    assert_eq!(body_src["duration"], 60);
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+    assert!(body_blob.is_string(), "{body_blob}");
+
+    run_ok(&dir, &["preview", "--out", "preview.mp4"]);
+    assert!(dir.join("preview.mp4").is_file());
+
+    let swapped = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/product.mp4",
+            "--in",
+            "6",
+            "--src-out",
+            "7",
+            "--out",
+            "ad-v2.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&swapped, "look")["cache"], "miss");
+    let hook_child = swapped["ledger"]["scion"].as_str().unwrap().to_string();
+    let hook_raw = load_scion_json(&dir, &hook_child);
+    let rebound = &hook_raw["layers"][0]["bindings"]["hook"]["source"]["range"];
+    assert_eq!(rebound["start"], 180);
+    assert_eq!(rebound["duration"], 30);
+    assert!(hook_raw.get("graph").is_none() || hook_raw["graph"].is_null());
+    let shown = run_ok(&dir, &["scion", "show", &hook_child]);
+    assert_eq!(shown["resolved"]["graph"]["nodes"][0]["id"], "look");
+
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    let primed = addressed["scion"].as_str().unwrap().to_string();
+    let primed_shown = run_ok(&dir, &["scion", "show", &primed]);
+    assert_eq!(primed_shown["resolved"]["graph"]["nodes"][0]["id"], "look");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_jl_key_captions() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_jl_key_captions — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-jl");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_color(&dir.join("takes"), "brand.mp4", "white", "4", "30");
+    write_cube(&dir.join("takes"), "look.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/caps.vtt"),
+        "WEBVTT\n\n00:00.000 --> 00:04.000\nBuy now\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r#"{
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"fade","duration_frames":6}],
+  "slots": [
+    {"id":"hook","file":"product.mp4","in":0,"out":1,"audio":{"in":0,"out":1.3}},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4},
+    {"id":"captions","role":"captions","file":"caps.vtt","in":0,"out":4},
+    {"id":"brand","role":"brand","file":"brand.mp4","in":0,"out":4}
+  ],
+  "nodes": [
+    {"id":"look","op":"lut3d","file":"look.cube"},
+    {"id":"box","op":"drawbox","params":{"x":"2","y":"2","w":"20","h":"8","color":"white","t":"2"}}
+  ]
+}"#,
+    )
+    .unwrap();
+    assert!(!dir.join("takes/hook.mp4").exists());
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    assert_eq!(plan_caption(&shipped, "captions")["cache"], "miss");
+    assert_eq!(plan_node(&shipped, "box")["cache"], "miss");
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    let hook_audio = &root_doc["layers"][0]["bindings"]["hook"]["audio"]["source"]["range"];
+    assert_eq!(hook_audio["start"], 0);
+    assert_eq!(hook_audio["duration"], 39);
+    let node_ids: Vec<&str> = root_doc["graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|node| node["id"].as_str())
+        .collect();
+    assert_eq!(node_ids, ["look", "box"]);
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_caption(&warmed, "captions")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+    let cap_blob = plan_caption(&warmed, "captions")["blob"].clone();
+
+    run_ok(&dir, &["preview", "--out", "preview.mp4"]);
+    assert!(dir.join("preview.mp4").is_file());
+
+    let swapped = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/product.mp4",
+            "--in",
+            "6",
+            "--src-out",
+            "7",
+            "--out",
+            "ad-v2.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_caption(&swapped, "captions")["cache"], "hit");
+    assert_eq!(plan_caption(&swapped, "captions")["blob"], cap_blob);
+    assert_eq!(plan_node(&swapped, "look")["cache"], "miss");
+    assert_eq!(plan_node(&swapped, "box")["cache"], "miss");
+    let hook_child = swapped["ledger"]["scion"].as_str().unwrap().to_string();
+    let hook_raw = load_scion_json(&dir, &hook_child);
+    let rebound_pic = &hook_raw["layers"][0]["bindings"]["hook"]["source"]["range"];
+    assert_eq!(rebound_pic["start"], 180);
+    assert_eq!(rebound_pic["duration"], 30);
+    let rebound_aud = &hook_raw["layers"][0]["bindings"]["hook"]["audio"]["source"]["range"];
+    assert_eq!(rebound_aud["start"], 180);
+    assert_eq!(rebound_aud["duration"], 39);
+    let shown = run_ok(&dir, &["scion", "show", &hook_child]);
+    assert_eq!(shown["resolved"]["graph"]["nodes"][1]["id"], "box");
+
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    assert_eq!(addressed["next"], "graft swap hook <file> [--in --src-out]");
+    let primed = addressed["scion"].as_str().unwrap().to_string();
+    let primed_shown = run_ok(&dir, &["scion", "show", &primed]);
+    assert_eq!(primed_shown["resolved"]["graph"]["nodes"][1]["id"], "box");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_overlay_otio_host_alias() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_overlay_otio_host_alias — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-overlay-otio");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_still(&dir.join("takes"), "bug.png", "white");
+    write_cube(&dir.join("takes"), "look.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/composition.json"),
+        r#"{
+  "dest": "96x96",
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"dipToBlack","duration_frames":6}],
+  "markers": [{"id":"punch","range":{"start":0,"duration":30}}],
+  "spans": [{"id":"look","enable":"between(t,0,4)"}],
+  "slots": [
+    {"id":"hook","file":"product.mp4","in":0,"out":1},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4},
+    {"id":"overlay","role":"overlay","file":"bug.png","in":0,"out":4,"place":{"start":0,"duration":4}}
+  ],
+  "nodes": [
+    {"id":"look","op":"lut3d","file":"look.cube"},
+    {"id":"sar","op":"setsar","params":{"sar":"1"}}
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let score: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(score["joins"][0]["transition"], "fadeblack");
+    assert_eq!(score["markers"][0]["id"], "punch");
+    assert_eq!(
+        score["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == "overlay"),
+        true
+    );
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    assert_eq!(root_doc["dest"]["width"], 96);
+    assert_eq!(root_doc["dest"]["height"], 96);
+    assert_eq!(root_doc["graph"]["nodes"][0]["id"], "look");
+    assert_eq!(root_doc["graph"]["nodes"][0]["enable"], "between(t,0,4)");
+    assert_eq!(root_doc["graph"]["nodes"][1]["id"], "sar");
+    assert!(root_doc["layers"][0]["bindings"].get("overlay").is_some());
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "look")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "sar")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    run_ok(&dir, &["preview", "--out", "preview.mp4"]);
+    assert!(dir.join("preview.mp4").is_file());
+
+    let swapped = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/product.mp4",
+            "--in",
+            "6",
+            "--src-out",
+            "7",
+            "--out",
+            "ad-v2.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&swapped, "look")["cache"], "miss");
+    assert_eq!(plan_node(&swapped, "sar")["cache"], "miss");
+
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    assert_eq!(addressed["next"], "graft swap hook <file> [--in --src-out]");
+    let nodes: Vec<&str> = addressed["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(nodes.contains(&"look"), "{nodes:?}");
+    assert!(nodes.contains(&"sar"), "{nodes:?}");
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            &root,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    assert!(dir.join("guest.otio.json").is_file());
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let guest = load_scion_json(&dir, "guest");
+    assert_eq!(guest["graph"]["nodes"][0]["id"], "look");
+    assert_eq!(guest["graph"]["nodes"][1]["id"], "sar");
+    assert!(guest["layers"][0]["bindings"].get("overlay").is_some());
+    assert!(guest["layers"][0]["bindings"].get("hook").is_some());
+
+    let imported = run_ok(&dir, &["compile", "--scion", "guest", "--out", "guest.mp4"]);
+    assert_eq!(plan_slot(&imported, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&imported, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&imported, "look")["cache"], "hit");
+    assert!(dir.join("guest.mp4").is_file());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_matte_mixboard_guest_score() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_matte_mixboard_guest_score — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-matte-mixboard");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_color(&dir.join("takes"), "fill.mp4", "blue", "4", "30");
+    write_still(&dir.join("takes"), "mask.png", "white");
+    write_cube(&dir.join("takes"), "look.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/composition.json"),
+        r##"{
+  "dest": "96x96",
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"dipToBlack","duration_frames":6}],
+  "markers": [{"id":"punch","range":{"start":0,"duration":30}}],
+  "slots": [
+    {"id":"hook","file":"product.mp4","in":0,"out":1},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4}
+  ],
+  "nodes": [
+    {"id":"look","op":"lut3d","file":"look.cube"},
+    {"id":"fill","op":"source","file":"fill.mp4","in":0,"out":4},
+    {"id":"mask","op":"source","file":"mask.png","in":0,"out":4},
+    {"id":"gradeblend","op":"blend","inputs":["#picture","fill"],"params":{"mode":"hardLight"}},
+    {"id":"matte","op":"maskedmerge","inputs":["#picture","fill","mask"]},
+    {"id":"comp","op":"acompressor","params":{"threshold":"0.1","ratio":"4"}}
+  ]
+}"##,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let score: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(score["joins"][0]["transition"], "fadeblack");
+    assert_eq!(score["markers"][0]["id"], "punch");
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    let node_ids: Vec<&str> = root_doc["graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|node| node["id"].as_str())
+        .collect();
+    assert_eq!(
+        node_ids,
+        ["look", "fill", "mask", "gradeblend", "matte", "comp"]
+    );
+    assert_eq!(root_doc["graph"]["nodes"][3]["params"]["mode"], "hardlight");
+    let chapters = probe_chapters(&dir.join("ad.mp4"));
+    let has_punch = chapters
+        .get("chapters")
+        .and_then(|v| v.as_array())
+        .is_some_and(|rows| {
+            rows.iter()
+                .any(|c| c["tags"]["title"] == "punch" || c["id"] == "punch")
+        });
+    assert!(has_punch, "{chapters}");
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    let swapped = run_ok(
+        &dir,
+        &[
+            "swap",
+            "hook",
+            "takes/product.mp4",
+            "--in",
+            "6",
+            "--src-out",
+            "7",
+            "--out",
+            "ad-v2.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&swapped, "look")["cache"], "miss");
+    assert_eq!(plan_node(&swapped, "matte")["cache"], "miss");
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            &root,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    let mut wiped: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    wiped["joins"] = serde_json::json!([]);
+    wiped["markers"] = serde_json::json!([]);
+    fs::write(dir.join("score.json"), wiped.to_string()).unwrap();
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let restored: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(restored["joins"][0]["transition"], "fadeblack");
+    assert_eq!(restored["markers"][0]["id"], "punch");
+    let guest = load_scion_json(&dir, "guest");
+    assert_eq!(guest["graph"]["nodes"][4]["id"], "matte");
+    assert_eq!(guest["graph"]["nodes"][5]["id"], "comp");
+
+    let imported = run_ok(&dir, &["compile", "--scion", "guest", "--out", "guest.mp4"]);
+    assert_eq!(plan_slot(&imported, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&imported, "body")["blob"], body_blob);
+    assert!(dir.join("guest.mp4").is_file());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_nested_scion_pad() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_nested_scion_pad — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-nested-pad");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_cube(&dir.join("takes"), "plate.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/plate-v2.cube"),
+        "LUT_3D_SIZE 2\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r##"{
+  "dest": "96x96",
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"fade","duration_frames":6}],
+  "nests": {
+    "plate": {
+      "slots": [{"id":"hook","file":"product.mp4","in":0,"out":1}],
+      "nodes": [{"id":"look","op":"lut3d","file":"plate.cube"}]
+    }
+  },
+  "slots": [
+    {"id":"hook","scion":"plate"},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4}
+  ]
+}"##,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    assert!(dir.join("nests/plate/score.json").is_file());
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    assert_eq!(root_doc["layers"][0]["bindings"]["hook"]["nested"], "plate");
+    let plate = load_scion_json(&dir, "plate");
+    assert_eq!(plate["graph"]["nodes"][0]["id"], "look");
+    assert_ne!(plate["concept"], root_doc["concept"]);
+    let look_v1 = plate["graph"]["nodes"][0]["material"].clone();
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    run_ok(
+        &dir,
+        &[
+            "swap",
+            "look",
+            "takes/plate-v2.cube",
+            "--scion",
+            "plate",
+            "--out",
+            "plate-v2.mp4",
+        ],
+    );
+    let plate_v2 = load_scion_json(&dir, "plate");
+    assert_ne!(plate_v2["graph"]["nodes"][0]["material"], look_v1);
+    let swapped = run_ok(&dir, &["compile", "--out", "ad-v2.mp4"]);
+    assert_eq!(plan_slot(&swapped, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert!(dir.join("ad-v2.mp4").is_file());
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            &root,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let guest = load_scion_json(&dir, "guest");
+    assert_eq!(guest["layers"][0]["bindings"]["hook"]["nested"], "plate");
+    let imported = run_ok(&dir, &["compile", "--scion", "guest", "--out", "guest.mp4"]);
+    assert_eq!(plan_slot(&imported, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&imported, "body")["blob"], body_blob);
+    assert!(dir.join("guest.mp4").is_file());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_adjust_overlay_address_nest() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_adjust_overlay_address_nest — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-adjust-overlay-address");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "10", "30");
+    write_still(&dir.join("takes"), "bug.png", "white");
+    write_still(&dir.join("takes"), "bug-v2.png", "black");
+    write_cube(&dir.join("takes"), "plate.cube", "1 1 1");
+    fs::write(
+        dir.join("takes/plate-v2.cube"),
+        "LUT_3D_SIZE 2\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n0 0 0\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r##"{
+  "dest": "96x96",
+  "working": {"pix_fmt":"yuv422p10le","color":"bt709","primaries":"bt709","trc":"bt709"},
+  "joins": [{"left":"hook","right":"body","transition":"fade","duration_frames":6}],
+  "nests": {
+    "plate": {
+      "slots": [{"id":"hook","file":"product.mp4","in":0,"out":1}],
+      "nodes": [{"id":"look","op":"lut3d","file":"plate.cube"}]
+    }
+  },
+  "adjustments": [
+    {
+      "enable": "between(t,0,1)",
+      "nodes": [
+        {"id":"grade","op":"lgg","params":{"lift":"0","gamma":"1","gain":"1","sat":"1.05"}},
+        {"id":"sop","op":"cdl","params":{"slope":"1","offset":"0","power":"1","sat":"1"}}
+      ]
+    }
+  ],
+  "slots": [
+    {"id":"hook","scion":"plate"},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4},
+    {"id":"overlay","role":"overlay","file":"bug.png","in":0,"out":4,"place":{"start":0,"duration":4},"x":8,"y":16,"opacity":0.8}
+  ],
+  "nodes": [
+    {"id":"convert","op":"colorspace","params":{"all":"bt709","primaries":"bt709","trc":"bt709"}}
+  ]
+}"##,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    let overlay = &root_doc["layers"][0]["bindings"]["overlay"];
+    assert_eq!(overlay["x"], "8");
+    assert_eq!(overlay["y"], "16");
+    assert_eq!(overlay["opacity"], 0.8);
+    let nodes = root_doc["graph"]["nodes"].as_array().unwrap();
+    let group = nodes.iter().find(|n| n["op"] == "group").unwrap();
+    assert_eq!(group["enable"], "between(t,0,1)");
+    let inner = group["nodes"].as_array().unwrap();
+    let grade = inner.iter().find(|n| n["id"] == "grade").unwrap();
+    let sop = inner.iter().find(|n| n["id"] == "sop").unwrap();
+    assert!(grade.get("enable").is_none() || grade["enable"].is_null());
+    assert!(sop.get("enable").is_none() || sop["enable"].is_null());
+    let convert = nodes.iter().find(|n| n["id"] == "convert").unwrap();
+    assert!(convert.get("enable").is_none() || convert["enable"].is_null());
+    assert_eq!(root_doc["dest"]["working"]["primaries"], "bt709");
+    assert_eq!(root_doc["dest"]["working"]["trc"], "bt709");
+
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    let named = addressed["nodes"].as_array().unwrap();
+    assert!(
+        named.iter().any(|n| n == "plate.look"),
+        "address must cover the nest look: {named:?}"
+    );
+    assert!(named.iter().any(|n| n == "grade"));
+    assert!(named.iter().any(|n| n == "convert"));
+    assert_eq!(addressed["next"], "graft swap look <file> --scion plate");
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "convert")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "grade")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    let swapped_overlay = run_ok(
+        &dir,
+        &["swap", "overlay", "takes/bug-v2.png", "--out", "ad-ov.mp4"],
+    );
+    assert_eq!(plan_slot(&swapped_overlay, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped_overlay, "body")["blob"], body_blob);
+    assert_eq!(swapped_overlay["plan"]["overlay_mix"], "miss");
+    let child = swapped_overlay["ledger"]["scion"].as_str().unwrap();
+    let child_doc = load_scion_json(&dir, child);
+    let child_overlay = &child_doc["layers"][0]["bindings"]["overlay"];
+    assert_eq!(child_overlay["x"], "8");
+    assert_eq!(child_overlay["y"], "16");
+    assert_eq!(child_overlay["opacity"], 0.8);
+
+    run_ok(
+        &dir,
+        &[
+            "swap",
+            "look",
+            "takes/plate-v2.cube",
+            "--scion",
+            "plate",
+            "--out",
+            "plate-v2.mp4",
+        ],
+    );
+    let after_look = run_ok(&dir, &["compile", "--out", "ad-v2.mp4"]);
+    assert_eq!(plan_slot(&after_look, "hook")["cache"], "miss");
+    assert_eq!(plan_slot(&after_look, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&after_look, "body")["blob"], body_blob);
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            child,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let guest = load_scion_json(&dir, "guest");
+    assert_eq!(guest["layers"][0]["bindings"]["hook"]["nested"], "plate");
+    assert_eq!(guest["layers"][0]["bindings"]["overlay"]["x"], "8");
+    assert_eq!(guest["layers"][0]["bindings"]["overlay"]["y"], "16");
+    assert_eq!(guest["layers"][0]["bindings"]["overlay"]["opacity"], 0.8);
+    let imported = run_ok(&dir, &["compile", "--scion", "guest", "--out", "guest.mp4"]);
+    assert_eq!(plan_slot(&imported, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&imported, "body")["blob"], body_blob);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_motion_remap_switch() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_motion_remap_switch — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-motion-remap-switch");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "6", "30");
+    write_color(&dir.join("takes"), "wide.mp4", "blue", "2", "30");
+    write_color(&dir.join("takes"), "close.mp4", "green", "2", "30");
+    write_still(&dir.join("takes"), "bug.png", "white");
+    fs::write(
+        dir.join("takes/cuts-v2.json"),
+        r#"{"cuts":[{"t":0,"map":0},{"t":0.25,"map":1}]}"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r##"{
+  "dest": "96x96",
+  "nests": {
+    "angles": {
+      "switch": {
+        "cuts": [
+          {"t": 0, "id": "hook", "file": "wide.mp4", "in": 0, "out": 1},
+          {"t": 0.5, "id": "close", "file": "close.mp4", "in": 0, "out": 0.5}
+        ]
+      }
+    }
+  },
+  "slots": [
+    {"id":"hook","scion":"angles"},
+    {"id":"body","file":"product.mp4","in":0,"out":3,"place":{"duration":2},"remap":[{"t":0,"v":2},{"t":1,"v":1}]},
+    {"id":"cta","file":"product.mp4","in":3,"out":4},
+    {"id":"overlay","role":"overlay","file":"bug.png","in":0,"out":4,"place":{"start":0,"duration":4},"motion":{"x":[{"t":0,"v":0},{"t":2,"v":40}],"y":[{"t":0,"v":8},{"t":2,"v":8}],"opacity":[{"t":0,"v":1},{"t":1,"v":0.4}]}}
+  ],
+  "nodes": [
+    {"id":"finish","op":"deband","params":{"1thr":"0.02","range":"16","blur":"1"}}
+  ]
+}"##,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    let body = &root_doc["layers"][0]["bindings"]["body"];
+    assert_eq!(body["remap"][0]["v"], 2.0);
+    assert_eq!(body["remap"][1]["t"], 1.0);
+    let overlay = &root_doc["layers"][0]["bindings"]["overlay"];
+    assert_eq!(overlay["motion"]["x"][1]["v"], 40.0);
+    assert_eq!(overlay["motion"]["opacity"][1]["v"], 0.4);
+    let angles = load_scion_json(&dir, "angles");
+    let switch = angles["graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["id"] == "switch")
+        .unwrap();
+    assert_eq!(switch["op"], "switch");
+    assert_eq!(switch["inputs"][1], "close");
+    assert_eq!(switch["params"]["cuts"][1]["t"], 0.5);
+
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    assert!(
+        addressed["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|node| node == "angles.switch"),
+        "address must name the multi-cam switch: {}",
+        addressed["nodes"]
+    );
+    assert_eq!(addressed["next"], "graft swap switch <file> --scion angles");
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "finish")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    let placed = run_ok(
+        &dir,
+        &[
+            "swap",
+            "overlay",
+            "--x",
+            "24",
+            "--y",
+            "12",
+            "--out",
+            "ad-place.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&placed, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&placed, "body")["blob"], body_blob);
+    assert_eq!(placed["plan"]["overlay_mix"], "miss");
+    let child = placed["ledger"]["scion"].as_str().unwrap();
+    let child_doc = load_scion_json(&dir, child);
+    let child_overlay = &child_doc["layers"][0]["bindings"]["overlay"];
+    assert_eq!(child_overlay["x"], "24");
+    assert_eq!(child_overlay["y"], "12");
+    assert!(child_overlay["motion"].get("x").is_none());
+    assert_eq!(child_overlay["motion"]["opacity"][1]["v"], 0.4);
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            child,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let guest = load_scion_json(&dir, "guest");
+    assert_eq!(guest["layers"][0]["bindings"]["body"]["remap"][0]["v"], 2.0);
+    assert_eq!(guest["layers"][0]["bindings"]["overlay"]["x"], "24");
+    assert_eq!(guest["layers"][0]["bindings"]["hook"]["nested"], "angles");
+
+    run_ok(
+        &dir,
+        &[
+            "swap",
+            "switch",
+            "takes/cuts-v2.json",
+            "--scion",
+            "angles",
+            "--out",
+            "angles.mp4",
+        ],
+    );
+    let after = run_ok(&dir, &["compile", "--out", "ad-v2.mp4"]);
+    assert_eq!(plan_slot(&after, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&after, "body")["blob"], body_blob);
+    assert_eq!(plan_slot(&after, "hook")["cache"], "miss");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn composition_closed_loop_generic_filtergraph() {
+    if !ffmpeg_available() {
+        eprintln!("skip composition_closed_loop_generic_filtergraph — install ffmpeg");
+        return;
+    }
+    let dir = tmp("composition-generic-filtergraph");
+    fs::create_dir_all(dir.join("takes")).unwrap();
+    write_color(&dir.join("takes"), "product.mp4", "red", "6", "30");
+    fs::write(
+        dir.join("takes/denoise-v2.json"),
+        r#"{"luma_spatial":8,"chroma_spatial":3}"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.join("takes/composition.json"),
+        r##"{
+  "dest": "96x96",
+  "slots": [
+    {"id":"hook","file":"product.mp4","in":0,"out":1},
+    {"id":"body","file":"product.mp4","in":1,"out":3},
+    {"id":"cta","file":"product.mp4","in":3,"out":4}
+  ],
+  "nodes": [
+    {
+      "id":"grade",
+      "op":"eq",
+      "params":{"gamma":1},
+      "keys":{"gamma":[{"t":0,"v":1,"ease":"linear"},{"t":1,"v":1.4,"ease":"ease_in_out"}]}
+    },
+    {"id":"voice","op":"deesser","params":{"i":0}}
+  ],
+  "adjustments": [
+    {
+      "id":"finish",
+      "enable":"gte(t,0)",
+      "nodes": [
+        {"id":"banding","op":"gradfun","params":{"strength":1.2}},
+        {"id":"denoise","op":"hqdn3d","params":{"luma_spatial":4,"chroma_spatial":3}}
+      ]
+    }
+  ]
+}"##,
+    )
+    .unwrap();
+
+    let (shipped, _) = run_ok_full(&dir, &["ship", "--out", "ad.mp4"]);
+    assert_eq!(shipped["plan"]["encode"], true);
+    assert!(dir.join("ad.mp4").is_file());
+    let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
+    let build = shipped["build"]["id"].as_str().unwrap().to_string();
+    let root_doc = load_scion_json(&dir, &root);
+    let nodes = root_doc["graph"]["nodes"].as_array().unwrap();
+    let grade = nodes.iter().find(|n| n["id"] == "grade").unwrap();
+    assert_eq!(grade["keys"]["gamma"][1]["ease"], "ease_in_out");
+    assert_eq!(grade["keys"]["gamma"][1]["v"], 1.4);
+    let voice = nodes.iter().find(|n| n["id"] == "voice").unwrap();
+    assert_eq!(voice["op"], "deesser");
+    let finish = nodes.iter().find(|n| n["id"] == "finish").unwrap();
+    assert_eq!(finish["op"], "group");
+    assert_eq!(finish["enable"], "gte(t,0)");
+    let inner = finish["nodes"].as_array().unwrap();
+    assert!(inner
+        .iter()
+        .any(|n| n["id"] == "banding" && n["op"] == "gradfun"));
+    assert!(inner
+        .iter()
+        .any(|n| n["id"] == "denoise" && n["op"] == "hqdn3d"));
+    assert!(inner
+        .iter()
+        .all(|n| n.get("enable").is_none() || n["enable"].is_null()));
+
+    let addressed = run_ok(&dir, &["address", "--kind", "hook_rate", "--build", &build]);
+    let named = addressed["nodes"].as_array().unwrap();
+    assert!(named.iter().any(|n| n == "denoise"), "address: {named:?}");
+    assert!(named.iter().any(|n| n == "grade"), "address: {named:?}");
+    assert!(named.iter().any(|n| n == "finish"), "address: {named:?}");
+
+    let warmed = run_ok(&dir, &["compile", "--out", "ad-warm.mp4"]);
+    assert_eq!(plan_slot(&warmed, "body")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "grade")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "voice")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "banding")["cache"], "hit");
+    assert_eq!(plan_node(&warmed, "denoise")["cache"], "hit");
+    let body_blob = plan_slot(&warmed, "body")["blob"].clone();
+
+    let swapped = run_ok(
+        &dir,
+        &[
+            "swap",
+            "denoise",
+            "takes/denoise-v2.json",
+            "--out",
+            "ad-dn.mp4",
+        ],
+    );
+    assert_eq!(plan_slot(&swapped, "body")["cache"], "hit");
+    assert_eq!(plan_slot(&swapped, "body")["blob"], body_blob);
+    assert_eq!(plan_node(&swapped, "denoise")["cache"], "miss");
+    assert_eq!(plan_node(&swapped, "banding")["cache"], "hit");
+    assert_eq!(plan_node(&swapped, "grade")["cache"], "hit");
+    assert_eq!(plan_node(&swapped, "voice")["cache"], "hit");
+    let child = swapped["ledger"]["scion"].as_str().unwrap();
+    let child_doc = load_scion_json(&dir, child);
+    let child_nodes = child_doc["graph"]["nodes"].as_array().unwrap();
+    let child_finish = child_nodes.iter().find(|n| n["id"] == "finish").unwrap();
+    let child_denoise = child_finish["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["id"] == "denoise")
+        .unwrap();
+    assert_eq!(child_denoise["params"]["luma_spatial"], 8);
+
+    run_ok(
+        &dir,
+        &[
+            "export",
+            "otio",
+            "--scion",
+            child,
+            "--out",
+            "guest.otio.json",
+        ],
+    );
+    run_ok(
+        &dir,
+        &["import", "otio", "guest.otio.json", "--scion", "guest"],
+    );
+    let guest = load_scion_json(&dir, "guest");
+    let guest_nodes = guest["graph"]["nodes"].as_array().unwrap();
+    let guest_grade = guest_nodes.iter().find(|n| n["id"] == "grade").unwrap();
+    assert_eq!(guest_grade["keys"]["gamma"][1]["ease"], "ease_in_out");
+    let guest_finish = guest_nodes.iter().find(|n| n["id"] == "finish").unwrap();
+    assert_eq!(guest_finish["op"], "group");
+    assert_eq!(guest_finish["enable"], "gte(t,0)");
+    assert!(guest_finish["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n["id"] == "denoise" && n["params"]["luma_spatial"] == 8));
+
+    let mut intra = root_doc;
+    intra["dest"]["encoder"]["impl"] = serde_json::json!("graft-intra");
+    fs::write(
+        dir.join(format!("scions/{root}.json")),
+        serde_json::to_string_pretty(&intra).unwrap(),
+    )
+    .unwrap();
+    let err = run_fail(&dir, &["compile", "--scion", &root, "--out", "intra.mp4"]);
+    assert!(
+        err.contains("scion.graph"),
+        "intra must fail closed on a graph: {err}"
+    );
+
     let _ = fs::remove_dir_all(&dir);
 }

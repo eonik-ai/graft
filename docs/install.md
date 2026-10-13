@@ -1,7 +1,8 @@
 # Install graft
 
-Change the hook. Keep the body. graft is a local-first composition
-workspace. The incremental compiler is the build engine.
+graft is a compiler for versioned ads. This page installs the reference CLI.
+A host that embeds the compiler depends on the crates from this git remote
+([hosts.md](hosts.md)).
 
 Runtime: **ffmpeg** and **ffprobe** on `PATH` (or `$FFMPEG` / `$FFPROBE`).
 graft shells out; it does not link GPL x264.
@@ -22,8 +23,8 @@ Homebrew 7 refuses unofficial taps until they are trusted. Stable is the
 GitHub Releases also attach `aarch64-apple-darwin` and
 `x86_64-apple-darwin` tarballs.
 
-MacPorts recipe: [`dist/macports/Portfile`](../dist/macports/Portfile)
-(not in macports-ports until a submitter lands it).
+MacPorts: GitHub Releases attach `aarch64-apple-darwin` and
+`x86_64-apple-darwin` tarballs until a port is in the tree.
 
 ## Linux
 
@@ -50,10 +51,9 @@ Nix (this flake):
 nix run github:eonik-ai/graft -- --help
 ```
 
-AUR / Alpine / Fedora / Void / Gentoo / SlackBuilds recipes live in
-[`dist/`](../dist/README.md). They are packager files, not a listing on
-[pkg.bot](https://pkg.bot/repos). One Debian ITP covers Ubuntu and the
-other debuntu clones; one Fedora review covers EPEL/RHEL clones.
+Packager recipes (AUR, Alpine, Fedora, Debian, Void, and others) live in
+[`dist/`](../dist/README.md). A file there is not `dnf install graft`.
+Install from this page until a distro ships the package.
 
 ## From source
 

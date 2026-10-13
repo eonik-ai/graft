@@ -1,36 +1,40 @@
 # Mission
 
-graft is a local-first composition workspace for iterating video.
-Its incremental compiler is the build engine, not the whole system.
+graft is a compiler and recipe IR for versioning ads.
 
-The score is source.
-Git is history.
-Essence is immutable.
-The mp4 is a compile.
+Hosts write the recipe. graft compiles the dest. Unchanged **subgraphs**
+keep their working-cache hits. A new hook must not re-run a clean body
+pad. A look, overlap transition, or spanning mix after the join may
+still re-filter those pixels. Bitstream-copy of an 8-bit body GOP is
+not the rule. See [composition.md](composition.md).
 
-You graft a new hook. The body stays.
+It is not eonik. eonik is a host that should call this compiler. Other
+editors may sit on the same IR later as **guests** — compile-out and
+lossy import, like USD versus Maya — not as lossless plugins.
 
-## The founding loop
+The CLI is a reference host. The compiler is the product.
 
-A team starts with **one concept** and maintains many **scions**: hook takes,
-destinations, languages, legal cuts, and other derived compositions. Teammates
-iterate on named slots and layers. A shipped build then receives a platform
-signal on its own time range ("hook rate, 0–3s", "too slow around 8s").
-graft resolves that signal through the exact build time map to a semantic slot,
-the team creates a new scion, and the compiler rebuilds only what changed.
+## The compile loop
 
-> concept → scions → team iteration → shipped build → platform signal →
-> addressed slot → new scion
+One **concept**, many **scions**: hook takes, destinations, languages,
+legal cuts. A shipped build can carry a platform signal on a time range
+("hook rate, 0–3s"). graft resolves that range through the exact build
+time map to a slot. The host binds a new take. The compiler rebuilds
+only what changed.
 
-graft's job is to make that loop explicit, inspectable, and local-first:
+> concept → scions → compile → shipped build → signal → addressed slot → new scion
 
-> Ship the next cut without recutting the tree.
-> Name the semantic change. Preserve the other scions. Reuse every clean
-> encode. Name the join you must recut (the kerf). Never recut the tree.
+Name the semantic change. Preserve the other scions. Reuse every clean
+**subgraph**. Name the join you must recut. Never recut the tree
+(principle 14: clean subgraph, not delivery GOP copy).
 
-A person runs that job as porcelain: `graft ship`, `graft swap`,
-`graft address`. Plumbing (`bind`, `compile`, `signal`, `iterate`) is what
-those commands call. See [loop.md](loop.md) and ADR 0009.
+The reference CLI exposes that as `graft ship`, `graft swap`,
+`graft address`. Plumbing (`bind`, `compile`, `signal`, `iterate`) is
+what those commands call. A host should call the crates. See
+[hosts.md](hosts.md), [loop.md](loop.md), and ADR 0009.
+
+graft is a public open source project. Pages a stranger reads describe
+the software, not eonik's GTM tracker. See [principle 15](principles.md).
 
 ## Division of responsibility
 
@@ -50,7 +54,7 @@ documented subset, but graft's native composition remains authoritative.
 
 ## Success
 
-graft succeeds when a fresh local workspace can:
+graft succeeds when a host can:
 
 1. preserve one concept and multiple inherited scions as Git-tracked recipes;
 2. show and merge semantic changes by slot and layer without merging media;
@@ -60,9 +64,10 @@ graft succeeds when a fresh local workspace can:
 5. ingest a platform signal, resolve it to the intended slot and kerf, and fork
    a new scion without guessing the replacement creative;
 6. exchange a supported OTIO/NLE subset with an explicit loss report; and
-7. run the same compiler locally and against a server store without a second IR.
+7. run the same compiler from a host process that depends on `graft-compile`,
+   not only from the reference CLI.
 
-That IR is not the user walk. A fresh workspace also:
+The reference CLI also:
 
 8. ships a first dest from a named `takes/` folder in one command;
 9. swaps one slot onto a new take, reuses every clean `slot_encode`, and
@@ -72,16 +77,18 @@ That IR is not the user walk. A fresh workspace also:
 
 ## Current state
 
-Schema `0.2.0` and tag `v0.2.0` implement the workspace IR: multiple tracked
-scions, layer flattening, semantic diff/merge, exact build provenance,
-declared-window feedback, synchronized audio on the ffmpeg path, scoped OTIO
-interchange, local preview, and object-store transport. Porcelain (`ship`,
-`swap`, `address`) closes the user loop on that IR (ADR 0009). The compiler
-is still sequential. It does not remotely execute, lock projects, round-trip
-NLE effects, infer slots from pixels, or generate replacement creative.
+Schema `0.2.0` implements the IR: multiple tracked scions, layer flattening,
+semantic diff/merge, exact build provenance, declared-window feedback,
+synchronized audio on the ffmpeg path, scoped OTIO interchange, local
+preview, and object-store transport. The only shipping host is the `graft`
+CLI (`ship`, `swap`, `address` on that IR). No other app — including eonik —
+compiles through these crates yet. Premiere / Resolve / DaVinci guests are
+not implemented. The compiler is sequential. It does not remotely execute,
+lock projects, round-trip NLE effects, infer slots from pixels, or generate
+replacement creative.
 
 ## Non-mission
 
-graft is not a DAM, a project lock, a review player, an ad publisher, or a
-replacement for an editor. The north star is local, signal-addressed creative
-iteration with surgical rebuilds, not "git for video."
+graft is not a DAM, a project lock, a review player, an ad publisher, an
+NLE, or a replacement for an editor. It is not eonik. The north star is a
+compiler hosts embed for surgical ad variants, not "git for video."

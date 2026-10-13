@@ -1,0 +1,31 @@
+---
+description: graft public pages are production OSS (principle 15). Applies every session.
+alwaysApply: true
+---
+
+# Principle 15 — public pages are the product
+
+graft is a public Apache-2.0 project. Every session follows
+[docs/principles.md](docs/principles.md) without the user restating it.
+
+README, `docs/install.md`, `docs/packaging.md`, `CHANGELOG.md`, GitHub
+release notes, and `docs/README.md` describe the software as it is.
+English is the only README.
+
+Do not put on those pages: pkg.bot, Repology coverage counts, eonik GTM,
+lead lists, living submission boards, founder checklists, "waiting on
+you", or "replace the editor" copy. Do not link `docs/SUBMISSIONS.md`
+from them.
+
+`dist/` recipes are packager source, not listings. A spec in-tree is not
+`dnf install graft`.
+
+```markdown
+<!-- BAD -->
+Packager recipes for the [pkg.bot](https://pkg.bot/repos) families live
+in dist/. Living board: docs/SUBMISSIONS.md.
+
+<!-- GOOD -->
+Install from GitHub Releases, the Homebrew tap, or cargo --git.
+Packager recipes live in dist/; a recipe is not a distro listing.
+```
