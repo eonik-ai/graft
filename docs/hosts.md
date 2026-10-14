@@ -5,9 +5,10 @@ compile a dest. graft is the compiler. The host is the product the person
 sees.
 
 eonik is meant to be a host. It does not compile through these crates yet.
-Premiere, Resolve, and DaVinci are not hosts today. They may become
-**guests** (lossy OTIO/FCPXML) later. See [adapters.md](adapters.md) and
-principle 11.
+The plug is the recipe plus `graft compile` / `graft_compile::compile`.
+Premiere, Final Cut, DaVinci Resolve, Shotcut, and Kdenlive are guests.
+`graft export guest` writes the file each of them already imports.
+They are not hosts. See [adapters.md](adapters.md) and principle 11.
 
 ## Rust
 

@@ -81,8 +81,9 @@ overlap. The time map stores compiled dest ranges.
 
 Optional `score.markers[]` is `{id, range}` on dest time. Markers do not
 dirty picture. Porcelain `composition.json` `markers` writes them. The
-delivery encode muxes them as chapters. OTIO import upserts sidecar
-joins and markers onto the score.
+delivery encode muxes them as chapters. Guest import (OTIO, FCPXML,
+FCP7 XML, MLT) upserts sidecar joins and markers onto the score. A trim
+in the guest updates the slot range.
 
 `dest_default` is a dest id hint (`"9x16"`). `graft scion create` uses it
 when `--dest-id` is omitted. It is not geometry; `--dest WxH` stays

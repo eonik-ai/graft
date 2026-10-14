@@ -82,8 +82,9 @@ semantic diff/merge, exact build provenance, declared-window feedback,
 synchronized audio on the ffmpeg path, scoped OTIO interchange, local
 preview, and object-store transport. The only shipping host is the `graft`
 CLI (`ship`, `swap`, `address` on that IR). No other app — including eonik —
-compiles through these crates yet. Premiere / Resolve / DaVinci guests are
-not implemented. The compiler is sequential. It does not remotely execute,
+compiles through these crates yet. Guests are the four interchange files
+from one flattened timeline (OTIO, FCPXML, FCP7 XML, MLT), with a loss
+report. The compiler is sequential. It does not remotely execute,
 lock projects, round-trip NLE effects, infer slots from pixels, or generate
 replacement creative.
 

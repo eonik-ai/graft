@@ -16,11 +16,11 @@ use graft_score::{
     effective_bindings, load_scion, load_score, load_time_map, merge_scions, parse_range, parse_wh,
     require_slot_id, resolve_scion, save_json, scion_has_nested, semantic_diff, AudioBinding,
     Binding, BindingLayer, BuildRecord, ChangeRequest, Dest, Encoder, Feedback, FeedbackResolution,
-    FrameRange, FrameRate, Join, Layer, Marker, Scion, Score, Slot, TimeMap, TimedRange, Window,
+    FrameRange, FrameRate, Layer, Scion, Score, Slot, TimeMap, TimedRange, Window,
     DEFAULT_SPILL_FRAMES, GRAFT_SCHEMA,
 };
 
-use crate::{composition, paths, preview};
+use crate::{composition, media, paths, preview};
 
 pub fn init(dir: &Path, from: Option<PathBuf>) -> Result<()> {
     std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
@@ -700,68 +700,91 @@ pub fn export(dir: &Path, format: &str, scion: Option<String>, out: PathBuf) -> 
     let (id, _) = load_selected_scion(dir, scion)?;
     let all = load_scions(dir)?;
     let scion = resolve_scion(&all, &id)?;
-    match format {
-        "otio" => {
-            let out = paths::resolve_in_dir(dir, out);
-            paths::print_json(&graft_otio::export_otio(&score, &scion, &out)?)
-        }
+    let media_index = media::load(dir)?;
+    let out = paths::resolve_in_dir(dir, out);
+    let wrote = match format {
+        "otio" => graft_otio::write_otio(&score, &scion, &out, &media_index)?,
+        "fcpxml" => graft_otio::export_fcpxml(&score, &scion, &out, &media_index)?,
+        "xmeml" => graft_otio::export_xmeml(&score, &scion, &out, &media_index)?,
+        "mlt" => graft_otio::export_mlt(&score, &scion, &out, &media_index)?,
+        "guest" => graft_otio::export_bundle(&score, &scion, &out, &media_index)?,
         _ => bail!("unsupported export format {format}"),
-    }
+    };
+    paths::print_json(&wrote)
 }
 
 pub fn import(dir: &Path, format: &str, file: PathBuf, id: String) -> Result<()> {
     if paths::scion(dir, &id).exists() {
         bail!("scion {id} already exists");
     }
-    let score = load_score(&paths::score(dir))?;
-    match format {
-        "otio" => {
-            let imported = graft_otio::import_otio(&score, &paths::resolve_in_dir(dir, file), &id)?;
-            apply_sidecar_score(dir, &imported.joins, &imported.markers)?;
-            save_json(&paths::scion(dir, &id), &imported.scion)?;
-            save_json(
-                &paths::scion(dir, &id).with_extension("loss.json"),
-                &imported.loss,
-            )?;
-            write_head(dir, &id)?;
-            paths::print_json(&serde_json::json!({
-                "scion": id,
-                "loss": imported.loss,
-                "joins": imported.joins.len(),
-                "markers": imported.markers.len()
-            }))
+    let path = paths::resolve_in_dir(dir, file);
+    if path.is_file() {
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            if graft_otio::is_capcut_draft(&path, &text) {
+                bail!("CapCut has no public edit API. draft JSON is not a guest format.");
+            }
         }
-        _ => bail!("unsupported import format {format}"),
     }
+    let score = load_score(&paths::score(dir))?;
+    let mut parsed = if format == "guest" && path.is_dir() {
+        graft_otio::parse_guest_dir(&path)?
+    } else {
+        graft_otio::parse_guest_file(&path)?
+    };
+    if format != "guest" && parsed.format != format {
+        bail!(
+            "{} is a {} file, not {format}",
+            path.display(),
+            parsed.format
+        );
+    }
+    hydrate_guest_media(dir, &mut parsed)?;
+    let imported = graft_otio::finish_import(&score, &id, &parsed)?;
+    let score_path = paths::score(dir);
+    let mut score = score;
+    let changed = graft_otio::apply_guest_edits(&mut score, &imported);
+    score.validate()?;
+    imported.scion.validate_against_score(&score)?;
+    if changed {
+        save_json(&score_path, &score)?;
+    }
+    save_json(&paths::scion(dir, &id), &imported.scion)?;
+    save_json(
+        &paths::scion(dir, &id).with_extension("loss.json"),
+        &imported.loss,
+    )?;
+    write_head(dir, &id)?;
+    paths::print_json(&serde_json::json!({
+        "scion": id,
+        "loss": imported.loss,
+        "joins": imported.joins.len(),
+        "markers": imported.markers.len(),
+        "slots": imported.slots.len()
+    }))
 }
 
-fn apply_sidecar_score(dir: &Path, joins: &[Join], markers: &[Marker]) -> Result<()> {
-    if joins.is_empty() && markers.is_empty() {
-        return Ok(());
-    }
-    let path = paths::score(dir);
-    let mut score = load_score(&path)?;
-    for join in joins {
-        if let Some(existing) = score
-            .joins
-            .iter_mut()
-            .find(|row| row.left == join.left && row.right == join.right)
+fn hydrate_guest_media(dir: &Path, parsed: &mut graft_otio::ParsedGuest) -> Result<()> {
+    for clip in &mut parsed.clips {
+        if clip
+            .material
+            .as_deref()
+            .is_some_and(graft_score::is_material_id)
         {
-            *existing = join.clone();
-        } else {
-            score.joins.push(join.clone());
+            continue;
         }
-    }
-    for marker in markers {
-        if let Some(existing) = score.markers.iter_mut().find(|row| row.id == marker.id) {
-            *existing = marker.clone();
-        } else {
-            score.markers.push(marker.clone());
+        let Some(path) = clip.path.clone() else {
+            continue;
+        };
+        let file = PathBuf::from(&path);
+        if !file.is_file() {
+            continue;
         }
+        let bytes = std::fs::read(&file).with_context(|| format!("read {}", file.display()))?;
+        let store = Fs::open(paths::graft_dir(dir))?;
+        let id = store.put_blob(Kind::Material, &bytes)?.to_string();
+        media::remember(dir, &id, &file)?;
+        clip.material = Some(id);
     }
-    score.validate()?;
-    save_json(&path, &score)?;
-    eprintln!("wrote {}", path.display());
     Ok(())
 }
 
@@ -966,6 +989,7 @@ fn resolve_material(dir: &Path, spec: &str, role: graft_score::Role) -> Result<R
     };
     let store = Fs::open(paths::graft_dir(dir))?;
     let id = store.put_blob(Kind::Material, &bytes)?.to_string();
+    media::remember(dir, &id, path)?;
     Ok(ResolvedMaterial { id, probe })
 }
 

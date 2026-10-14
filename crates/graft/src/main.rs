@@ -2,6 +2,7 @@
 
 mod cmd;
 mod composition;
+mod media;
 mod paths;
 mod preview;
 
@@ -119,7 +120,7 @@ enum Command {
         #[arg(long)]
         scion: String,
     },
-    /// Export a flattened scion through a lossy guest adapter.
+    /// Export one flattened timeline as OTIO, FCPXML, FCP7 XML, MLT, or all of them.
     Export {
         format: AdapterFormat,
         #[arg(long)]
@@ -127,7 +128,7 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Import a supported guest document as a new scion.
+    /// Import a guest file as a new scion. `guest` reads the export directory.
     Import {
         format: AdapterFormat,
         file: PathBuf,
@@ -268,13 +269,26 @@ enum FeedbackCommand {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum AdapterFormat {
+    /// OpenTimelineIO. DaVinci Resolve opens this.
     Otio,
+    /// Final Cut Pro 1.9.
+    Fcpxml,
+    /// FCP7 XML. Premiere Pro opens this.
+    Xmeml,
+    /// MLT XML. Shotcut and Kdenlive open this.
+    Mlt,
+    /// Directory of all four files plus a loss report.
+    Guest,
 }
 
 impl AdapterFormat {
     fn as_str(self) -> &'static str {
         match self {
             Self::Otio => "otio",
+            Self::Fcpxml => "fcpxml",
+            Self::Xmeml => "xmeml",
+            Self::Mlt => "mlt",
+            Self::Guest => "guest",
         }
     }
 }

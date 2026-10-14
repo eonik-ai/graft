@@ -675,7 +675,7 @@ It does not mean: ask the host to export `takes/hook.mov`.
 | J/L cuts | **have** — `audio.source` + optional `audio.place` |
 | Nested graphs | **have** — nest scion as working pad (RFC 0007). An in-graph `group` is stored and lowered with `enable=` (ffmpeg has no subgraph object) |
 | Multi-cam switch | **have** — nest `switch.cuts` (RFC 0009). `streamselect` stays a static map |
-| OTIO native effects/grades | **guest** loss; import restores `graph` / overlays **and** score joins / markers |
+| OTIO native effects/grades | **guest** loss. One timeline lowers to OTIO, FCPXML 1.9, FCP7 XMEML, and MLT (RFC 0011). Import restores `graph` / overlays / joins / markers. A guest trim updates the slot. CapCut draft JSON is refused |
 | Intra splice of a graph, extra overlay pads, or a nested scion | fail-closed — needs the ffmpeg working path |
 | Spine concat of closed-GOP H.264 | special case only (not default) |
 
@@ -702,6 +702,10 @@ refuses a graph.
 
 ## Changelog
 
+- **2026-10-14** — Guest timeline (RFC 0011): one flatten lowers to OTIO,
+  FCPXML 1.9, FCP7 XMEML, and MLT. The loss report names the file each
+  app opens. Photoshop and After Effects are not timelines. CapCut draft
+  JSON is refused. Native effects stay lost.
 - **2026-10-13** — Filter lowerer, adjustment groups, easing (RFC 0010):
   a filter-shaped op this binary has lowers as `key=value` + `enable=`.
   A missing filter is `toolchain`. Unknown params fail closed.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 [package]
 name = "graft-otio"
-description = "Lossy OTIO guest adapter. Depends on graft-score only."
+description = "Lossy guest adapters for OTIO, FCPXML, FCP7 XML, and MLT. Depends on graft-score only."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

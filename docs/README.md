@@ -26,4 +26,4 @@ Start with [mission](mission.md), [principles](principles.md), and
 | [brand/](brand/) | Mark: two clips, one join |
 | [TRANSLATING.md](TRANSLATING.md) | English README only |
 | [adr/](adr/) | Decisions already made |
-| [rfc/](rfc/) | Contract changes. RFC 0001–0010 are accepted (`0.2.0`). |
+| [rfc/](rfc/) | Contract changes. RFC 0001–0011 are accepted (`0.2.0`). |

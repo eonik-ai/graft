@@ -84,8 +84,10 @@ feature of the delivery encode, not of the working graph.
 ## 11. Adapters are guests
 
 Universal means compile-out / lossy import, like USD vs Maya. It does
-not mean lossless AAF to every NLE. CapCut has no public edit API;
-draft JSON is reverse-engineered. Document loss. Do not lie.
+not mean lossless AAF to every NLE. The public files are OTIO, FCPXML
+1.9, FCP7 XMEML, and MLT, from one flattened timeline. CapCut has no
+public edit API; draft JSON is refused. Photoshop and After Effects are
+not timelines. Document loss. Do not lie.
 
 ## 12. Device-first
 

@@ -9,9 +9,10 @@ and a look graph. graft rebuilds the dirty working nodes and encodes
 delivery once.
 
 It is not an editor and it is not [eonik](https://www.eonik.ai/). eonik is a
-host that should call this compiler. Premiere, Resolve, and DaVinci can
-become guests later the way Maya sits on USD: compile-out, lossy import, a
-loss report. They are not lossless plugins. See [adapters](docs/adapters.md).
+host that should call this compiler. Premiere, Final Cut, DaVinci Resolve,
+Shotcut, and Kdenlive are guests the way Maya sits on USD: one timeline
+lowered to the file each app already imports, plus a loss report. They are
+not lossless plugins. See [adapters](docs/adapters.md).
 
 [Mission](docs/mission.md) · [Schema](schema/) · [Hosts](docs/hosts.md) ·
 [Install](docs/install.md)
@@ -158,8 +159,13 @@ make test
 
 | Guest | Today |
 | --- | --- |
-| OTIO | Sidecar keeps `graph` / overlays / joins / markers; import writes those onto the score; native effects stay lost |
-| FCPXML, Premiere, Resolve, DaVinci, CapCut | Not implemented. Export would flatten slots to a timeline; import is best-effort. [Loss matrix](docs/adapters.md) |
+| `graft export guest` | Writes `resolve.otio`, `finalcut.fcpxml`, `premiere.xml`, `shotcut.mlt`, and `loss.json` |
+| OTIO, FCPXML, FCP7 XML, MLT | Same flattened cut. Sidecar keeps `graph` / overlays / joins / markers. A trim in the guest updates the slot. Native effects stay lost |
+| CapCut, Photoshop, After Effects | No timeline file. CapCut draft JSON is refused. Stills bind as overlay or brand. [Loss matrix](docs/adapters.md) |
+
+`graft export otio|fcpxml|xmeml|mlt` writes one of those files.
+Media opens when `.graft/media.json` has the path the take was ingested from.
+Until then the clip is offline and the hash is still in the file.
 
 ## Also
 

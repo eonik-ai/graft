@@ -12,6 +12,12 @@ This project's crates stay `publish = false`.
 
 ### Added
 
+- One guest timeline (RFC 0011). `graft export guest` writes OTIO
+  (Resolve), FCPXML 1.9 (Final Cut), FCP7 XML (Premiere), and MLT
+  (Shotcut, Kdenlive), plus a loss report. Import restores the graft
+  sidecar onto a new scion. A cut edited in the guest wins. CapCut
+  draft JSON is refused. `.graft/media.json` records the path of each
+  ingested file so those timelines can open it.
 - Generic filter lowerer, stored adjustment groups, and eased keys
   (RFC 0010). A filter-shaped op this ffmpeg has lowers as `key=value`
   plus `enable=`. A missing filter is `toolchain`. Unknown params fail

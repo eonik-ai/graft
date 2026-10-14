@@ -1095,7 +1095,9 @@ fn put_node_material(dir: &Path, from: &Path, file: &Path) -> Result<String> {
     }
     let bytes = std::fs::read(&path)?;
     let store = Fs::open(paths::graft_dir(dir))?;
-    Ok(store.put_blob(Kind::Material, &bytes)?.to_string())
+    let id = store.put_blob(Kind::Material, &bytes)?.to_string();
+    crate::media::remember(dir, &id, &path)?;
+    Ok(id)
 }
 
 pub fn put_lut_material(dir: &Path, path: &Path) -> Result<String> {
@@ -1107,7 +1109,9 @@ pub fn put_lut_material(dir: &Path, path: &Path) -> Result<String> {
         bail!("{} is not a LUT (.cube / .3dl)", path.display());
     }
     let store = Fs::open(paths::graft_dir(dir))?;
-    Ok(store.put_blob(Kind::Material, &bytes)?.to_string())
+    let id = store.put_blob(Kind::Material, &bytes)?.to_string();
+    crate::media::remember(dir, &id, path)?;
+    Ok(id)
 }
 
 pub fn looks_like_lut(bytes: &[u8]) -> bool {

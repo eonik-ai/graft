@@ -144,7 +144,7 @@ must not import adapter or crate code.
 | `graft-score` | A | Parse, validate, canonically hash the IR. Schema is normative. |
 | `graft-cas` | B + C store | Namespaced blobs + action cache. `ActionKey` ≠ `BlobId`. |
 | `graft-compile` | C | Flatten → action graph → schedule. Intra encode. Signal dirty-set. |
-| `graft-otio` | guest | Scoped OTIO export/import plus loss report. |
+| `graft-otio` | guest | One timeline lowered to OTIO, FCPXML, FCP7 XML, and MLT, plus a loss report. |
 | `graft` | — | CLI. Calls the crates. Does not reimplement rules. |
 
 There is no product version. Crates are unpublished `0.2.0` workspace
@@ -295,7 +295,7 @@ Arbitrary-source mid-GOP repair remains later.
 Flags belong in `README.md` only.
 
 The CLI creates, forks, diffs, merges, compiles, ingests feedback, iterates,
-exports/imports OTIO, previews, and syncs an object-store root. Porcelain
+exports/imports OTIO, FCPXML, FCP7 XML, and MLT, previews, and syncs an object-store root. Porcelain
 `ship` / `swap` / `address` call those verbs (ADR 0009). Git remains
 porcelain-light via `graft status`.
 

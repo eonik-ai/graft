@@ -2932,14 +2932,11 @@ fn composition_closed_loop_overlay_otio_host_alias() {
         serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
     assert_eq!(score["joins"][0]["transition"], "fadeblack");
     assert_eq!(score["markers"][0]["id"], "punch");
-    assert_eq!(
-        score["slots"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|s| s["id"] == "overlay"),
-        true
-    );
+    assert!(score["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["id"] == "overlay"));
     let root = shipped["ledger"]["scion"].as_str().unwrap().to_string();
     let root_doc = load_scion_json(&dir, &root);
     assert_eq!(root_doc["dest"]["width"], 96);
@@ -3695,5 +3692,71 @@ fn composition_closed_loop_generic_filtergraph() {
         "intra must fail closed on a graph: {err}"
     );
 
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn guest_export_roundtrips_without_an_encode() {
+    let src = example_dir();
+    let dir = tmp("guest-export");
+    fs::copy(src.join("score.json"), dir.join("score.json")).unwrap();
+    fs::create_dir_all(dir.join("scions")).unwrap();
+    for entry in fs::read_dir(src.join("scions")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            fs::copy(&path, dir.join("scions").join(path.file_name().unwrap())).unwrap();
+        }
+    }
+    let before: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    run_ok(&dir, &["export", "guest", "--out", "guest"]);
+    let loss: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("guest/loss.json")).unwrap()).unwrap();
+    assert_eq!(loss["files"]["premiere_pro"], "premiere.xml");
+    assert_eq!(loss["files"]["final_cut_pro"], "finalcut.fcpxml");
+    assert_eq!(loss["files"]["davinci_resolve"], "resolve.otio");
+    assert_eq!(loss["files"]["shotcut"], "shotcut.mlt");
+    assert!(loss["no_timeline"]["capcut"]
+        .as_str()
+        .unwrap()
+        .contains("public"));
+    assert!(loss["no_timeline"]["photoshop"].is_string());
+    assert!(loss["no_timeline"]["after_effects"].is_string());
+    assert!(loss["eonik"].as_str().unwrap().contains("host"));
+    assert_eq!(loss["lost"][0], "effects");
+    let source = fs::read_dir(dir.join("scions"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let source: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&source).unwrap()).unwrap();
+    let hook = source["layers"][0]["bindings"]["hook"]["material"].clone();
+    let body_source = source["layers"][0]["bindings"]["body"]["source"].clone();
+    for (format, file, id) in [
+        ("fcpxml", "guest/finalcut.fcpxml", "from-fcp"),
+        ("xmeml", "guest/premiere.xml", "from-premiere"),
+        ("otio", "guest/resolve.otio", "from-resolve"),
+        ("mlt", "guest/shotcut.mlt", "from-mlt"),
+        ("guest", "guest", "from-guest"),
+    ] {
+        run_ok(&dir, &["import", format, file, "--scion", id]);
+        let got = load_scion_json(&dir, id);
+        assert_eq!(got["layers"][0]["bindings"]["hook"]["material"], hook);
+        assert_eq!(got["layers"][0]["bindings"]["body"]["source"], body_source);
+    }
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("score.json")).unwrap()).unwrap();
+    assert_eq!(before, after);
+    fs::write(dir.join("draft_info.json"), b"{}").unwrap();
+    let err = run_fail(
+        &dir,
+        &["import", "fcpxml", "draft_info.json", "--scion", "nope"],
+    );
+    assert!(
+        err.contains("CapCut"),
+        "capcut draft must be refused: {err}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

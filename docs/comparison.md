@@ -41,8 +41,9 @@ The reference CLI (`ship` / `swap` / `address`) runs that loop without
 eight plumbing verbs (ADR 0009). A host should call `graft_compile::compile`.
 
 The current implementation provides those semantics plus the incremental
-compiler and that CLI. NLE guests remain lossy; only the scoped OTIO
-subset is implemented. No app host compiles through the crates yet.
+compiler and that CLI. NLE guests remain lossy. One flattened timeline
+lowers to OTIO, FCPXML, FCP7 XML, and MLT. No app host compiles through
+the crates yet.
 
 ## Closest cousins
 
